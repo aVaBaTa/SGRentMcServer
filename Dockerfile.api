@@ -10,10 +10,13 @@ RUN CGO_ENABLED=0 go build -o /api ./cmd/api
 
 # --- Runtime stage ---
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
+# openssh-client : pour piloter les nodes distants via le transport ssh:// (connhelper)
+RUN apk add --no-cache ca-certificates openssh-client
 COPY --from=builder /api /api
+COPY docker/api-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 ENV PORT=8080
 ENV ENV=production
 EXPOSE 8080
-ENTRYPOINT ["/api"]
+ENTRYPOINT ["/entrypoint.sh"]

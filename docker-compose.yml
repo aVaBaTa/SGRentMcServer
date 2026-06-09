@@ -44,12 +44,13 @@ services:
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
       DISCORD_REDIRECT_URL: https://mcserver.vbt-prog.com/auth/discord/callback
-      DOCKER_NODES: node1=unix:///var/run/docker.sock
+      DOCKER_NODES: node1=unix:///var/run/docker.sock,node2=ssh://simon@10.0.0.110
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID}
       PAYPAL_SECRET: ${PAYPAL_SECRET}
       PAYPAL_ENV: ${PAYPAL_ENV:-sandbox}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./secrets/ssh:/etc/sgrent-ssh:ro
     networks:
       - sgrent
       - portfolio-net

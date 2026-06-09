@@ -88,8 +88,11 @@ export default function ServerPage() {
         const res = await fetch(`${API}/api/v1/servers/${id}/checkout/paypal/${data.orderID}/capture`, {
           method: "POST", credentials: "include",
         });
-        if (res.ok) { alert("Paiement réussi ! Ton plan est activé."); setSelectedPlan(""); fetchServer(); }
-        else alert("Erreur: " + (await res.text()));
+        if (res.ok) {
+          router.push(`/merci?plan=${selectedPlan}&server=${id}`);
+        } else {
+          alert("Erreur: " + (await res.text()));
+        }
       },
       onError: (err: any) => alert("Erreur PayPal: " + err),
     }).render(paypalRef.current);

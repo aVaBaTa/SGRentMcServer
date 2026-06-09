@@ -356,7 +356,14 @@ L'architecture modulaire (image Docker par jeu, même orchestrateur) permet d'aj
 - [x] **Monitoring trafic réseau** ✓ (2026-06-09) — débit ↓↑ MB/s temps réel + totaux GB, agrégé sur tous les containers (le `/proc/net/dev` de l'hôte n'est pas lisible depuis le container — isolation net namespace — donc on agrège le trafic des containers, ce qui est plus pertinent). Carte "Trafic réseau (serveurs)" dans /admin.
 - [ ] Améliorations panel admin : historique/graphiques, taille des volumes (worlds), filtre serveurs-gérés-seulement
 - [ ] Migrer le panel vers `admin.vbt-prog.com` (sous-domaine dédié) quand souhaité
-- [ ] Load balancer multi-node (Node 1 + Node 2)
+- [x] **Load balancer multi-node — FONCTIONNEL** ✓ (2026-06-09)
+  - Node 2 = `xe90bequiet` (10.0.0.110), Docker 27.5.1, user `simon` dans groupe docker
+  - Accès via transport **ssh://** (connhelper) — pas de daemon TCP/TLS, pas de sudo. Clé dédiée `~/.ssh/orchestrator_node2` autorisée sur node2.
+  - Container API : `openssh-client` + entrypoint qui copie `/etc/sgrent-ssh` → `/root/.ssh` en root (ssh exige l'ownership root du config). Secrets montés via `./secrets/ssh` (gitignored).
+  - `DOCKER_NODES=node1=unix://...,node2=ssh://simon@10.0.0.110`. `BestNode` choisit le node avec le plus de RAM libre.
+  - ✅ Testé : création/start/delete d'un serveur sur node2 OK. Répartition auto confirmée.
+  - Projets copiés sur node2 (`~/Shared_Projects/2026/SGPortfolio` + `SGRentMcServer`). `mc-net` créé sur node2.
+  - ⚠️ RESTE pour serveurs node2 : accès externe = port-forward 25566+ sur node2 ; routing par username (mc-router) cross-host = nécessite overlay/Swarm (mc-router sur node1 ne voit pas les containers node2). Pour l'instant les serveurs node2 sont joignables en direct `10.0.0.110:port` sur le LAN.
 - [ ] Alertes & monitoring (seuils RAM/CPU)
 
 ### Phase 5 — Pumpkin & polish
