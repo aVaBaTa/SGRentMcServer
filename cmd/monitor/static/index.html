@@ -87,9 +87,28 @@
     </section>
 
     <!-- Containers -->
-    <section>
+    <section class="mb-8">
       <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Containers</h2>
       <div id="containers" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- Utilisateurs -->
+    <section>
+      <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Utilisateurs <span id="user-count" class="text-zinc-600"></span></h2>
+      <div class="rounded-xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs text-zinc-500 border-b border-zinc-800">
+              <th class="px-4 py-3 font-medium">Utilisateur</th>
+              <th class="px-4 py-3 font-medium">Email</th>
+              <th class="px-4 py-3 font-medium">Plan</th>
+              <th class="px-4 py-3 font-medium">Serveurs</th>
+              <th class="px-4 py-3 font-medium">Inscrit</th>
+            </tr>
+          </thead>
+          <tbody id="users"></tbody>
+        </table>
+      </div>
     </section>
   </div>
 
@@ -209,8 +228,33 @@
       }
     }
 
+    const planColor = (p) => p === 'free' ? 'text-zinc-400' : 'text-green-400';
+    async function fetchUsers() {
+      try {
+        const res = await fetch('api/users');
+        if (!res.ok) { document.getElementById('users').innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-zinc-600">Liste indisponible</td></tr>'; return; }
+        const users = await res.json();
+        document.getElementById('user-count').textContent = `(${users.length})`;
+        document.getElementById('users').innerHTML = users.length ? users.map(u => `
+          <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30">
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2">
+                ${u.avatar ? `<img src="${u.avatar}" class="w-6 h-6 rounded-full" />` : '<div class="w-6 h-6 rounded-full bg-zinc-700"></div>'}
+                <span class="font-medium">${u.username}</span>
+              </div>
+            </td>
+            <td class="px-4 py-3 text-zinc-400">${u.email || '—'}</td>
+            <td class="px-4 py-3 capitalize ${planColor(u.plan)}">${u.plan}</td>
+            <td class="px-4 py-3 font-mono">${u.server_count}</td>
+            <td class="px-4 py-3 text-zinc-500 text-xs">${new Date(u.created_at).toLocaleDateString('fr-CA')}</td>
+          </tr>`).join('') : '<tr><td colspan="5" class="px-4 py-4 text-zinc-600">Aucun utilisateur</td></tr>';
+      } catch (e) { /* ignore */ }
+    }
+
     refresh();
     setInterval(refresh, 2000);
+    fetchUsers();
+    setInterval(fetchUsers, 15000);
   </script>
 </body>
 </html>

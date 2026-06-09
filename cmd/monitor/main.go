@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aVaBaTa/SGRentMcServer/internal/monitor"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:embed static/*
@@ -26,7 +27,37 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Connexion DB optionnelle (pour la liste des utilisateurs)
+	var db *pgxpool.Pool
+	if dbURL := getEnv("DATABASE_URL", ""); dbURL != "" {
+		if pool, err := pgxpool.New(context.Background(), dbURL); err == nil {
+			db = pool
+			defer db.Close()
+		} else {
+			slog.Warn("db unavailable, users list disabled", "err", err)
+		}
+	}
+
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /api/users", func(w http.ResponseWriter, r *http.Request) {
+		if db == nil {
+			http.Error(w, "db not configured", http.StatusServiceUnavailable)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		defer cancel()
+		users, err := monitor.ListUsers(ctx, db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if users == nil {
+			users = []monitor.UserInfo{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(users)
+	})
 
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
