@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mcserver-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sgrentmc
+      POSTGRES_USER: sgrent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./internal/db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    networks:
+      - sgrent
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sgrent -d sgrentmc"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mcserver-redis
+    restart: unless-stopped
+    networks:
+      - sgrent
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: mcserver-api:latest
+    container_name: mcserver-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      ENV: production
+      DATABASE_URL: postgres://sgrent:${POSTGRES_PASSWORD}@postgres:5432/sgrentmc?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      DISCORD_REDIRECT_URL: https://mcserver.vbt-prog.com/auth/discord/callback
+      DOCKER_NODES: node1=unix:///var/run/docker.sock
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID}
+      PAYPAL_SECRET: ${PAYPAL_SECRET}
+      PAYPAL_ENV: ${PAYPAL_ENV:-sandbox}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - sgrent
+      - portfolio-net
+
+volumes:
+  pgdata:
+
+networks:
+  sgrent:
+  portfolio-net:
+    external: true
+    name: sgportfolio_portfolio-net

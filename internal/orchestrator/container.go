@@ -1,0 +1,151 @@
+package orchestrator
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"strconv"
+
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/go-connections/nat"
+)
+
+// ServerSpec décrit un serveur de jeu à créer.
+type ServerSpec struct {
+	ContainerName string
+	Image         string // ex: "itzg/minecraft-server:latest"
+	RAMMb         int64
+	CPUCores      float64
+	Port          int      // port hôte (accès direct IP:port)
+	Subdomain     string   // sous-domaine
+	RouterHost    string   // hostname complet pour mc-router (ex: avabata.servers.vbt-prog.com)
+	Network       string   // réseau Docker partagé avec mc-router (ex: mc-net)
+	EnvVars       []string
+}
+
+func (n *Node) CreateServer(ctx context.Context, spec ServerSpec) (string, error) {
+	// Pull l'image si absente
+	if err := n.pullImage(ctx, spec.Image); err != nil {
+		return "", fmt.Errorf("pull image: %w", err)
+	}
+
+	// MC écoute toujours sur 25565 dans le container ; on mappe le port hôte
+	// dynamique (spec.Port) vers ce port interne fixe.
+	const mcInternalPort = "25565/tcp"
+	hostPortStr := strconv.Itoa(spec.Port)
+	containerPort := nat.Port(mcInternalPort)
+
+	labels := map[string]string{
+		"sgrent.managed":   "true",
+		"sgrent.ram_mb":    strconv.FormatInt(spec.RAMMb, 10),
+		"sgrent.subdomain": spec.Subdomain,
+	}
+	// Label mc-router : route hostname → ce container (port interne 25565).
+	if spec.RouterHost != "" {
+		labels["mc-router.host"] = spec.RouterHost
+		labels["mc-router.port"] = "25565"
+	}
+
+	cfg := &container.Config{
+		Image:  spec.Image,
+		Labels: labels,
+		Env:    spec.EnvVars,
+		ExposedPorts: nat.PortSet{
+			containerPort: struct{}{},
+		},
+	}
+
+	// Volume nommé persistant pour les données du serveur (monde, configs, mods).
+	// Conservé même si le container est supprimé (cf. RemoveServer).
+	dataVolume := spec.ContainerName + "-data"
+
+	hostCfg := &container.HostConfig{
+		PortBindings: nat.PortMap{
+			containerPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: hostPortStr}},
+		},
+		Binds: []string{dataVolume + ":/data"},
+		Resources: container.Resources{
+			Memory:     spec.RAMMb * 1024 * 1024,
+			MemorySwap: spec.RAMMb * 1024 * 1024,
+			NanoCPUs:   int64(spec.CPUCores * 1e9),
+		},
+		RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
+	}
+
+	// Rejoint le réseau partagé avec mc-router (pour le routing par hostname).
+	netCfg := &network.NetworkingConfig{}
+	if spec.Network != "" {
+		netCfg.EndpointsConfig = map[string]*network.EndpointSettings{
+			spec.Network: {},
+		}
+	}
+
+	resp, err := n.cli.ContainerCreate(ctx, cfg, hostCfg, netCfg, nil, spec.ContainerName)
+	if err != nil {
+		return "", fmt.Errorf("create container: %w", err)
+	}
+	return resp.ID, nil
+}
+
+// UpdateResources change les limites RAM/CPU d'un container à chaud (upgrade/downgrade).
+// MemorySwap doit être >= Memory ; on le met égal à Memory (pas de swap) pour éviter
+// l'erreur Docker lors d'une augmentation de RAM.
+func (n *Node) UpdateResources(ctx context.Context, containerID string, ramMB int64, cpuCores float64) error {
+	memBytes := ramMB * 1024 * 1024
+	_, err := n.cli.ContainerUpdate(ctx, containerID, container.UpdateConfig{
+		Resources: container.Resources{
+			Memory:     memBytes,
+			MemorySwap: memBytes,
+			NanoCPUs:   int64(cpuCores * 1e9),
+		},
+	})
+	return err
+}
+
+func (n *Node) StartServer(ctx context.Context, containerID string) error {
+	return n.cli.ContainerStart(ctx, containerID, container.StartOptions{})
+}
+
+func (n *Node) StopServer(ctx context.Context, containerID string) error {
+	timeout := 30
+	return n.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
+}
+
+func (n *Node) RestartServer(ctx context.Context, containerID string) error {
+	timeout := 30
+	return n.cli.ContainerRestart(ctx, containerID, container.StopOptions{Timeout: &timeout})
+}
+
+func (n *Node) RemoveServer(ctx context.Context, containerID string) error {
+	return n.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{
+		Force:         true,
+		RemoveVolumes: false, // garder les données du monde
+	})
+}
+
+func (n *Node) GetContainerStatus(ctx context.Context, containerID string) (string, error) {
+	info, err := n.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return "", err
+	}
+	return info.State.Status, nil
+}
+
+func (n *Node) pullImage(ctx context.Context, img string) error {
+	rc, err := n.cli.ImagePull(ctx, img, image.PullOptions{})
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	io.Copy(io.Discard, rc) // attendre la fin du pull
+	return nil
+}
+
+func containerListOpts() container.ListOptions {
+	return container.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", "sgrent.managed=true")),
+	}
+}

@@ -1,0 +1,19 @@
+# --- Build stage ---
+FROM golang:1.25-alpine AS builder
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 go build -o /monitor ./cmd/monitor
+
+# --- Runtime stage ---
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /monitor /monitor
+
+ENV MONITOR_PORT=8090
+ENV HOST_ROOT=/host
+EXPOSE 8090
+ENTRYPOINT ["/monitor"]
