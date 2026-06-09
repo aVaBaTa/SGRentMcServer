@@ -6,6 +6,7 @@ import (
 	"github.com/aVaBaTa/SGRentMcServer/internal/auth"
 	"github.com/aVaBaTa/SGRentMcServer/internal/billing"
 	"github.com/aVaBaTa/SGRentMcServer/internal/config"
+	"github.com/aVaBaTa/SGRentMcServer/internal/mcrouter"
 	"github.com/aVaBaTa/SGRentMcServer/internal/orchestrator"
 	"github.com/aVaBaTa/SGRentMcServer/internal/servers"
 	"github.com/go-chi/chi/v5"
@@ -26,9 +27,10 @@ type Server struct {
 	serverRepo   *servers.Repo
 	paypal       *billing.PayPal
 	paymentRepo  *billing.Repo
+	mcRouter     *mcrouter.Client
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, orch *orchestrator.Orchestrator) http.Handler {
+func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, orch *orchestrator.Orchestrator) *Server {
 	s := &Server{
 		cfg:          cfg,
 		db:           db,
@@ -39,11 +41,17 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, orch *orchestr
 		serverRepo:   servers.NewRepo(db),
 		paypal:       billing.NewPayPal(cfg.PayPalClientID, cfg.PayPalSecret, cfg.PayPalEnv),
 		paymentRepo:  billing.NewRepo(db),
+		mcRouter:     mcrouter.New(cfg.MCRouterAPI),
 	}
 	s.router = chi.NewRouter()
 	s.mountMiddleware()
 	s.mountRoutes()
-	return s.router
+	return s
+}
+
+// ServeHTTP permet à *Server d'être utilisé directement comme http.Handler.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.router.ServeHTTP(w, r)
 }
 
 func (s *Server) mountMiddleware() {

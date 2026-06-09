@@ -363,7 +363,10 @@ L'architecture modulaire (image Docker par jeu, même orchestrateur) permet d'aj
   - `DOCKER_NODES=node1=unix://...,node2=ssh://simon@10.0.0.110`. `BestNode` choisit le node avec le plus de RAM libre.
   - ✅ Testé : création/start/delete d'un serveur sur node2 OK. Répartition auto confirmée.
   - Projets copiés sur node2 (`~/Shared_Projects/2026/SGPortfolio` + `SGRentMcServer`). `mc-net` créé sur node2.
-  - ⚠️ RESTE pour serveurs node2 : accès externe = port-forward 25566+ sur node2 ; routing par username (mc-router) cross-host = nécessite overlay/Swarm (mc-router sur node1 ne voit pas les containers node2). Pour l'instant les serveurs node2 sont joignables en direct `10.0.0.110:port` sur le LAN.
+  - ✅ **Routing cross-host par username IMPLÉMENTÉ** : mc-router géré via API REST (plus d'auto-découverte Docker). L'orchestrateur enregistre `hostname → backend` à la création/recréation, désenregistre à la suppression, réconcilie au démarrage (`ReconcileRoutes`). Backend = nom de container sur mc-net (node local) OU `IP_LAN:port` (node distant). `internal/mcrouter/client.go`, config `MC_ROUTER_API` + `NODE_ADDRS`. mc-router sur portfolio-net + mc-net.
+  - ✅ Vérifié : routing node1 (`avabata` → Paper) OK.
+  - ⚠️ **BLOQUEUR node2 : FIREWALL**. node2 (xe90bequiet) a un firewall qui ne laisse passer que SSH. Les ports de jeu 25566-26565 sont bloqués → mc-router ne peut pas joindre les serveurs node2. **ACTION UTILISATEUR (sudo sur node2)** : `sudo ufw allow 25566:26565/tcp` (+ ouvrir 25565 si accès direct). Sans ça, les serveurs node2 sont créés/gérés mais injoignables.
+  - ⚠️ Note ops : `mc-router` doit être connecté à `mc-net` ET `sgportfolio_portfolio-net` (`docker network connect mc-net mc-router`) — à scripter (non persistant si recréé).
 - [ ] Alertes & monitoring (seuils RAM/CPU)
 
 ### Phase 5 — Pumpkin & polish
@@ -371,6 +374,14 @@ L'architecture modulaire (image Docker par jeu, même orchestrateur) permet d'aj
 - [ ] Modrinth/CurseForge modpack import
 - [ ] Auth custom email+password (en plus de Discord)
 - [ ] Autres jeux (Satisfactory, Rust, ARK)
+
+### Monétisation publicitaire (OPTIONNEL — note)
+> Revenu principal = plans payants. La pub est secondaire et à faire avec prudence.
+- **NE PAS** mettre de pub sur l'app/dashboard/accueil (nuit aux conversions, viole souvent les règles AdSense, looks "cheap" pour un service payant).
+- **AdSense uniquement sur le blog** (contenu = autorisé/pertinent). Prérequis : compte AdSense approuvé (`ca-pub-XXXX`), politique de confidentialité, contenu original + un peu de trafic (sites neufs souvent refusés au début).
+- **Alternative à faible trafic : affiliation** sur le blog (matériel gaming, clés de jeux) — rapporte plus qu'AdSense à bas volume, moins intrusif.
+- Défauts à prévoir quand on l'active : ID éditeur `ca-pub-XXXX` en variable d'env/config, composant `<AdSlot>` blog-only, script AdSense chargé conditionnellement (pages blog seulement), `app/confidentialite` (politique requise).
+- Statut : non implémenté, à activer quand AdSense approuvé.
 
 ### Phase 6 — Marketing, SEO & acquisition
 - [x] Bases SEO techniques ✓ (2026-06-09) : `app/robots.ts` (/robots.txt), `app/sitemap.ts` (/sitemap.xml), metadata enrichies (title/description mots-clés, OpenGraph, canonical, keywords FR Québec)

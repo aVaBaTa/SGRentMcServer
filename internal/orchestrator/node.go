@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/docker/cli/cli/connhelper"
 	"github.com/docker/docker/client"
@@ -40,6 +41,12 @@ func newNode(id, host string) (*Node, error) {
 		return nil, fmt.Errorf("node %s: %w", id, err)
 	}
 	return &Node{ID: id, Host: host, cli: cli}, nil
+}
+
+// IsLocal indique si le node est la machine locale (socket unix), par opposition
+// à un node distant (ssh://, tcp://).
+func (n *Node) IsLocal() bool {
+	return strings.HasPrefix(n.Host, "unix://")
 }
 
 // Stats retourne la RAM libre et les CPU disponibles sur le node.

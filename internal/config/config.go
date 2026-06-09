@@ -39,6 +39,9 @@ type Config struct {
 	ServersDomain string // ex: servers.vbt-prog.com (pour mc-router hostname)
 	MCNetwork     string // réseau Docker partagé avec mc-router
 
+	MCRouterAPI string            // ex: http://mc-router:26666
+	NodeAddrs   map[string]string // IP LAN par node pour le routing (node1=10.0.0.2,...)
+
 	Env string
 }
 
@@ -70,8 +73,22 @@ func Load() *Config {
 		DockerNodes:   parseNodes(getEnv("DOCKER_NODES", "node1=unix:///var/run/docker.sock")),
 		ServersDomain: getEnv("SERVERS_DOMAIN", "servers.vbt-prog.com"),
 		MCNetwork:     getEnv("MC_NETWORK", "mc-net"),
+		MCRouterAPI:   getEnv("MC_ROUTER_API", "http://mc-router:26666"),
+		NodeAddrs:     parseKV(getEnv("NODE_ADDRS", "node1=10.0.0.2,node2=10.0.0.110")),
 		Env:           getEnv("ENV", "development"),
 	}
+}
+
+// parseKV parse "k1=v1,k2=v2" en map.
+func parseKV(raw string) map[string]string {
+	m := make(map[string]string)
+	for _, entry := range strings.Split(raw, ",") {
+		parts := strings.SplitN(strings.TrimSpace(entry), "=", 2)
+		if len(parts) == 2 {
+			m[parts[0]] = parts[1]
+		}
+	}
+	return m
 }
 
 // parseNodes parse "node1=host1,node2=host2" en []DockerNode

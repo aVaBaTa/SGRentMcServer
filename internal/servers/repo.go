@@ -68,6 +68,30 @@ func (r *Repo) ListByUser(ctx context.Context, userID string) ([]*GameServer, er
 	return list, nil
 }
 
+// ListAll retourne tous les serveurs (pour la réconciliation des routes au démarrage).
+func (r *Repo) ListAll(ctx context.Context) ([]*GameServer, error) {
+	const q = `
+		SELECT id, user_id, name, subdomain, game, plan, version, node, container_id, status, ram_mb, cpu_cores, port, created_at
+		FROM game_servers
+	`
+	rows, err := r.db.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*GameServer
+	for rows.Next() {
+		s := &GameServer{}
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version,
+			&s.Node, &s.ContainerID, &s.Status, &s.RAMMb, &s.CPUCores, &s.Port, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, s)
+	}
+	return list, nil
+}
+
 func (r *Repo) GetByID(ctx context.Context, id, userID string) (*GameServer, error) {
 	const q = `
 		SELECT id, user_id, name, subdomain, game, plan, version, node, container_id, status, ram_mb, cpu_cores, port, created_at

@@ -44,6 +44,13 @@ func main() {
 
 	srv := server.New(cfg, pg, rdb, orch)
 
+	// Ré-enregistre les routes mc-router des serveurs existants (après un redémarrage)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		srv.ReconcileRoutes(ctx)
+	}()
+
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      srv,

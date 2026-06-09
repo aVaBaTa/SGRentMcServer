@@ -134,6 +134,7 @@ func (s *Server) provisionServer(gs *servers.GameServer, game string, port int, 
 	}
 
 	s.serverRepo.UpdateStatus(ctx, gs.ID, "running")
+	s.registerRoute(ctx, gs)
 	slog.Info("provision: server running", "id", gs.ID, "port", port)
 }
 
@@ -172,6 +173,8 @@ func (s *Server) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server not found", http.StatusNotFound)
 		return
 	}
+
+	s.unregisterRoute(r.Context(), gs)
 
 	if gs.ContainerID != "" {
 		node, err := s.orch.NodeByID(gs.Node)
@@ -297,6 +300,7 @@ func (s *Server) recreateServer(gs *servers.GameServer, node *orchestrator.Node,
 		return
 	}
 	s.serverRepo.UpdateStatus(ctx, gs.ID, "running")
+	s.registerRoute(ctx, gs)
 	slog.Info("recreate: server running new version", "id", gs.ID, "version", version)
 }
 
@@ -386,6 +390,56 @@ func minecraftEnv(plan servers.Plan, version string) []string {
 		env = append(env, fmt.Sprintf("MAX_PLAYERS=%d", plan.MaxSlots))
 	}
 	return env
+}
+
+// registerRoute enregistre la route mc-router : hostname → IP_LAN_du_node:port.
+// Fonctionne pour n'importe quel node (routing cross-host).
+func (s *Server) registerRoute(ctx context.Context, gs *servers.GameServer) {
+	if !s.mcRouter.Configured() {
+		return
+	}
+	host := gs.Subdomain + "." + s.cfg.ServersDomain
+
+	// Node local : mc-router joint le container par nom sur mc-net (DNS Docker).
+	// Node distant : via l'IP LAN + le port hôte publié.
+	var backend string
+	if node, err := s.orch.NodeByID(gs.Node); err == nil && node.IsLocal() {
+		backend = fmt.Sprintf("sgrent-%s:25565", gs.ID)
+	} else {
+		addr := s.cfg.NodeAddrs[gs.Node]
+		if addr == "" {
+			slog.Warn("no LAN address for node", "node", gs.Node)
+			return
+		}
+		backend = fmt.Sprintf("%s:%d", addr, gs.Port)
+	}
+
+	if err := s.mcRouter.Register(ctx, host, backend); err != nil {
+		slog.Warn("mc-router register failed", "host", host, "backend", backend, "err", err)
+	} else {
+		slog.Info("route registered", "host", host, "backend", backend)
+	}
+}
+
+func (s *Server) unregisterRoute(ctx context.Context, gs *servers.GameServer) {
+	if s.mcRouter.Configured() {
+		s.mcRouter.Unregister(ctx, gs.Subdomain+"."+s.cfg.ServersDomain)
+	}
+}
+
+// ReconcileRoutes ré-enregistre les routes de tous les serveurs (au démarrage de l'API).
+func (s *Server) ReconcileRoutes(ctx context.Context) {
+	list, err := s.serverRepo.ListAll(ctx)
+	if err != nil {
+		slog.Error("reconcile routes: list failed", "err", err)
+		return
+	}
+	for _, gs := range list {
+		if gs.Status == "running" || gs.Status == "creating" {
+			s.registerRoute(ctx, gs)
+		}
+	}
+	slog.Info("routes reconciled", "count", len(list))
 }
 
 // uniqueSubdomain génère un sous-domaine unique basé sur le username.
