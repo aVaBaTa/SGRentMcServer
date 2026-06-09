@@ -68,8 +68,8 @@ func (n *Node) CreateServer(ctx context.Context, spec ServerSpec) (string, error
 		},
 		Binds: []string{dataVolume + ":/data"},
 		Resources: container.Resources{
-			Memory:     spec.RAMMb * 1024 * 1024,
-			MemorySwap: spec.RAMMb * 1024 * 1024,
+			Memory:     containerMemBytes(spec.RAMMb),
+			MemorySwap: containerMemBytes(spec.RAMMb),
 			NanoCPUs:   int64(spec.CPUCores * 1e9),
 		},
 		RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
@@ -93,8 +93,20 @@ func (n *Node) CreateServer(ctx context.Context, spec ServerSpec) (string, error
 // UpdateResources change les limites RAM/CPU d'un container à chaud (upgrade/downgrade).
 // MemorySwap doit être >= Memory ; on le met égal à Memory (pas de swap) pour éviter
 // l'erreur Docker lors d'une augmentation de RAM.
+// containerMemBytes calcule la limite mémoire du cgroup à partir du tas JVM
+// annoncé (ramMB). La limite dépasse le tas pour laisser de la marge au non-heap
+// (metaspace, threads, buffers directs, GC), sinon le cgroup tue la JVM (OOM)
+// au démarrage / pendant la génération du monde. Marge = +50 %, minimum +512 Mo.
+func containerMemBytes(ramMB int64) int64 {
+	overhead := ramMB / 2
+	if overhead < 512 {
+		overhead = 512
+	}
+	return (ramMB + overhead) * 1024 * 1024
+}
+
 func (n *Node) UpdateResources(ctx context.Context, containerID string, ramMB int64, cpuCores float64) error {
-	memBytes := ramMB * 1024 * 1024
+	memBytes := containerMemBytes(ramMB)
 	_, err := n.cli.ContainerUpdate(ctx, containerID, container.UpdateConfig{
 		Resources: container.Resources{
 			Memory:     memBytes,

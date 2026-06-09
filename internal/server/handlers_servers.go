@@ -379,6 +379,9 @@ func minecraftEnv(plan servers.Plan, version string) []string {
 	if version == "" {
 		version = "LATEST"
 	}
+	// MEMORY = tas JVM = la RAM annoncée du plan. La limite mémoire du container
+	// (HostConfig.Memory) est volontairement plus haute pour laisser de la marge
+	// au non-heap (metaspace, threads, buffers directs, GC) — voir container.go.
 	env := []string{
 		"EULA=TRUE",
 		"TYPE=PAPER",
