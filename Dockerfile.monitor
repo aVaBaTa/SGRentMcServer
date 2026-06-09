@@ -10,10 +10,12 @@ RUN CGO_ENABLED=0 go build -o /monitor ./cmd/monitor
 
 # --- Runtime stage ---
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates openssh-client
 COPY --from=builder /monitor /monitor
+COPY docker/api-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && sed -i 's#exec /api#exec /monitor#' /entrypoint.sh
 
 ENV MONITOR_PORT=8090
 ENV HOST_ROOT=/host
 EXPOSE 8090
-ENTRYPOINT ["/monitor"]
+ENTRYPOINT ["/entrypoint.sh"]

@@ -273,6 +273,16 @@ L'architecture modulaire (image Docker par jeu, même orchestrateur) permet d'aj
 
 ---
 
+## Serveur courriel (docker-mailserver) — déployé sur xe80dell (2026-06-09)
+
+- Projet : `~/Shared_Projects/2026/SGMail` (docker-compose + mailserver.env, gitignore data/secrets). Container `mailserver` (mailserver/docker-mailserver:15.1.0), hostname `mail.vbt-prog.com`.
+- Ports : 25 (réception), 465/587 (envoi/client), 993 (IMAP). TLS : `SSL_TYPE=manual` avec le cert Cloudflare Origin (`*.vbt-prog.com`) monté — fonctionne mais non reconnu publiquement (avertissement client).
+- **Domaine retenu : `mcserver.vbt-prog.com`** (l'utilisateur a mis le MX dessus). Boîte `contact@mcserver.vbt-prog.com` (mdp dans `~/Shared_Projects/2026/SGMail/.mailpw-mcserver.txt`). DKIM généré pour `mcserver.vbt-prog.com`. (Une boîte `contact@vbt-prog.com` existe aussi, legacy.)
+- ✅ Vérifié : réception SMTP → INBOX → lecture IMAP avec les identifiants.
+- ⚠️ **Port 25 SORTANT bloqué par le FAI** → envoi direct impossible, il FAUT un relais SMTP (smarthost). Config prête dans `mailserver.env` (`RELAY_*` commentés). Recommandé : Brevo (gratuit 300/j).
+- [ ] ACTION UTILISATEUR : DNS Cloudflare pour `mcserver.vbt-prog.com` — MX `@mcserver` → `mail.vbt-prog.com` (prio 10), A `mail` → 24.157.140.226 **DNS-only (gris)**, SPF/DKIM/DMARC. + forward ports 25/587/993 vers 10.0.0.2.
+- [ ] Relais SMTP (Brevo) pour l'envoi · [ ] TLS Let's Encrypt pour `mail.vbt-prog.com` · [ ] brancher l'app pour envoyer les reçus de paiement.
+
 ## Phases de développement
 
 ### Phase 1 — Fondations (priorité)
@@ -352,7 +362,7 @@ L'architecture modulaire (image Docker par jeu, même orchestrateur) permet d'aj
   - Endpoints monitor : `POST /admin/api/containers/{id}/stop|delete` (agissent direct sur Docker, derrière Basic Auth)
   - ⚠️ Limite v1 : actions directes Docker — pour un serveur SGRent géré, la ligne DB `game_servers` n'est pas synchronisée (orphelin possible). Réconciliation à prévoir.
   - Affichage des **cœurs CPU alloués** par container (`cpu_limit` depuis `HostConfig.NanoCPUs`)
-- [ ] **Monitoring multi-node** : actuellement le monitor lit UNIQUEMENT le socket Docker local (xe80dell). Le 2e Dell n'apparaîtra PAS tant qu'on n'étend pas le collecteur pour se connecter à plusieurs daemons Docker (Docker API distante via TCP+TLS, ou un agent monitor sur chaque node qui remonte ses métriques). Réutiliser le concept `DOCKER_NODES` de l'orchestrateur.
+- [x] **Monitoring multi-node — FAIT** ✓ (2026-06-09) : le monitor lit node1 (socket local) ET node2 (ssh://) via `DOCKER_NODES`. Collecteur refactoré (`internal/monitor/collector.go`) : agrège les containers des 2 nodes (champ `node`), résumé par node (`NodeSummary` : RAM/CPU/containers/online). UI : section "Nodes" + badge node par container. Actions stop/delete trouvent le bon node. Image monitor : `openssh-client` + entrypoint SSH + mount `secrets/ssh` + `DOCKER_NODES`. Vérifié : node1 + node2 visibles dans /admin.
 - [x] **Monitoring trafic réseau** ✓ (2026-06-09) — débit ↓↑ MB/s temps réel + totaux GB, agrégé sur tous les containers (le `/proc/net/dev` de l'hôte n'est pas lisible depuis le container — isolation net namespace — donc on agrège le trafic des containers, ce qui est plus pertinent). Carte "Trafic réseau (serveurs)" dans /admin.
 - [ ] Améliorations panel admin : historique/graphiques, taille des volumes (worlds), filtre serveurs-gérés-seulement
 - [ ] Migrer le panel vers `admin.vbt-prog.com` (sous-domaine dédié) quand souhaité

@@ -18,8 +18,9 @@ var staticFS embed.FS
 func main() {
 	port := getEnv("MONITOR_PORT", "8090")
 	hostRoot := getEnv("HOST_ROOT", "/host")
+	nodes := getEnv("DOCKER_NODES", "node1=unix:///var/run/docker.sock")
 
-	collector, err := monitor.NewCollector(hostRoot)
+	collector, err := monitor.NewCollector(hostRoot, nodes)
 	if err != nil {
 		slog.Error("failed to init collector", "err", err)
 		os.Exit(1)

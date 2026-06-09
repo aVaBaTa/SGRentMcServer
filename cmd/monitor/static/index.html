@@ -80,6 +80,12 @@
       </div>
     </section>
 
+    <!-- Nodes (serveurs physiques) -->
+    <section class="mb-8">
+      <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Nodes (serveurs physiques)</h2>
+      <div id="nodes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
     <!-- Containers -->
     <section>
       <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Containers</h2>
@@ -107,7 +113,8 @@
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-2.5 h-2.5 rounded-full shrink-0 ${stateColor}"></span>
               <span class="font-semibold truncate">${c.name}</span>
-              ${c.managed ? '<span class="text-[10px] font-semibold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">Playrena</span>' : ''}
+              <span class="text-[10px] font-semibold text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded shrink-0">${c.node}</span>
+              ${c.managed ? '<span class="text-[10px] font-semibold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded shrink-0">Playrena</span>' : ''}
             </div>
             <span class="text-xs text-zinc-500 shrink-0">${fmtUptime(c.uptime_secs)}</span>
           </div>
@@ -177,6 +184,23 @@
         document.getElementById('net-total').textContent = `↓${h.net_rx_total_gb.toFixed(1)} ↑${h.net_tx_total_gb.toFixed(1)} GB`;
 
         document.getElementById('ct-count').textContent = h.container_up + ' / ' + h.container_total;
+
+        // Nodes
+        document.getElementById('nodes').innerHTML = (d.nodes || []).map(n => {
+          const memPct = n.mem_total_mb ? Math.min(n.mem_used_mb / n.mem_total_mb * 100, 100) : 0;
+          return `
+            <div class="rounded-xl border ${n.online ? 'border-zinc-800' : 'border-red-900'} bg-zinc-900 p-5">
+              <div class="flex items-center justify-between mb-3">
+                <span class="font-semibold flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full ${n.online ? 'bg-green-400' : 'bg-red-500'}"></span>${n.id}
+                </span>
+                <span class="text-xs text-zinc-500">${n.cpu_count} cœurs · ${n.containers} containers</span>
+              </div>
+              <div class="flex justify-between text-xs mb-1"><span class="text-zinc-400">RAM serveurs</span><span class="font-mono">${fmtMB(n.mem_used_mb)} / ${fmtMB(n.mem_total_mb)}</span></div>
+              <div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden"><div class="bar h-full ${barColor(memPct)}" style="width:${memPct}%"></div></div>
+            </div>`;
+        }).join('');
+
         document.getElementById('containers').innerHTML = d.containers.map(renderContainer).join('');
 
         document.getElementById('last-update').textContent = 'à jour · ' + new Date(d.timestamp).toLocaleTimeString('fr-CA');
