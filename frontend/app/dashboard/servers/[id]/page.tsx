@@ -89,7 +89,7 @@ export default function ServerPage() {
           method: "POST", credentials: "include",
         });
         if (res.ok) {
-          router.push(`/merci?plan=${selectedPlan}&server=${id}`);
+          router.push(`/merci?plan=${selectedPlan}&server=${id}&txn=${data.orderID}`);
         } else {
           alert("Erreur: " + (await res.text()));
         }

@@ -5,26 +5,27 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, Server } from "lucide-react";
 
-// ⚠️ Remplace par ton libellé de conversion Google Ads (Google Ads → Conversions →
-// crée une action "Achat" → tu obtiens un send_to du type "AW-18226964787/AbCdEf...").
-const CONVERSION_SEND_TO = "AW-18226964787";
+// Libellé de conversion Google Ads (action "Achat")
+const CONVERSION_SEND_TO = "AW-18226964787/7YNXCMudhLwcELPSpfND";
 
 function MerciContent() {
   const params = useSearchParams();
   const plan = params.get("plan") ?? "";
   const server = params.get("server") ?? "";
+  const txn = params.get("txn") ?? "";
 
   useEffect(() => {
-    // Déclenche la conversion Google Ads
+    // Déclenche la conversion Google Ads (Achat)
     const w = window as any;
     if (typeof w.gtag === "function") {
       w.gtag("event", "conversion", {
         send_to: CONVERSION_SEND_TO,
-        value: 0,
-        currency: "USD",
+        value: 1.0,
+        currency: "CAD",
+        transaction_id: txn,
       });
     }
-  }, []);
+  }, [txn]);
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center text-center px-6 gap-6">
