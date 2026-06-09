@@ -34,7 +34,7 @@
     <!-- Host summary -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">RAM Hôte</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">RAM totale (cluster)</div>
         <div class="flex items-end justify-between mb-2">
           <span id="host-mem-val" class="text-2xl font-bold">—</span>
           <span id="host-mem-pct" class="text-sm text-zinc-400">—</span>
@@ -43,7 +43,7 @@
       </div>
 
       <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">CPU / Charge</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">CPU (cluster)</div>
         <div class="flex items-end justify-between mb-2">
           <span id="host-load-val" class="text-2xl font-bold">—</span>
           <span id="host-cpu-count" class="text-sm text-zinc-400">—</span>
@@ -88,7 +88,7 @@
 
     <!-- Containers -->
     <section class="mb-8">
-      <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Containers</h2>
+      <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Containers <span id="container-filter" class="text-green-400 normal-case font-normal"></span></h2>
       <div id="containers" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
     </section>
 
@@ -174,6 +174,45 @@
       refresh();
     }
 
+    // --- Cluster : sélection de node + filtrage des containers ---
+    let lastSnap = null;
+    let nodeFilter = '';
+
+    function toggleNode(id) {
+      nodeFilter = (nodeFilter === id) ? '' : id;
+      renderNodes();
+      renderContainers();
+    }
+
+    function renderNodes() {
+      if (!lastSnap) return;
+      document.getElementById('nodes').innerHTML = (lastSnap.nodes || []).map(n => {
+        const memPct = n.mem_total_mb ? Math.min(n.mem_used_mb / n.mem_total_mb * 100, 100) : 0;
+        const sel = nodeFilter === n.id;
+        return `
+          <div onclick="toggleNode('${n.id}')" class="cursor-pointer rounded-xl border ${sel ? 'border-green-500 ring-1 ring-green-500/40' : (n.online ? 'border-zinc-800 hover:border-zinc-600' : 'border-red-900')} bg-zinc-900 p-5 transition-colors">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-semibold flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full ${n.online ? 'bg-green-400' : 'bg-red-500'}"></span>${n.id}
+                ${sel ? '<span class="text-[10px] text-green-400">● filtré</span>' : ''}
+              </span>
+              <span class="text-xs text-zinc-500">${n.cpu_count} cœurs · ${n.containers} containers</span>
+            </div>
+            <div class="flex justify-between text-xs mb-1"><span class="text-zinc-400">RAM serveurs</span><span class="font-mono">${fmtMB(n.mem_used_mb)} / ${fmtMB(n.mem_total_mb)}</span></div>
+            <div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden"><div class="bar h-full ${barColor(memPct)}" style="width:${memPct}%"></div></div>
+          </div>`;
+      }).join('');
+    }
+
+    function renderContainers() {
+      if (!lastSnap) return;
+      const list = (lastSnap.containers || []).filter(c => !nodeFilter || c.node === nodeFilter);
+      document.getElementById('containers').innerHTML = list.map(renderContainer).join('');
+      document.getElementById('container-filter').textContent = nodeFilter
+        ? `— ${nodeFilter} (${list.length}) · clique à nouveau le node pour tout voir`
+        : '';
+    }
+
     async function refresh() {
       try {
         const res = await fetch('api/stats');
@@ -181,17 +220,26 @@
         const d = await res.json();
         const h = d.host;
 
-        document.getElementById('host-name').textContent = h.hostname;
-        document.getElementById('host-mem-val').textContent = fmtMB(h.mem_used_mb) + ' / ' + fmtMB(h.mem_total_mb);
-        document.getElementById('host-mem-pct').textContent = h.mem_percent.toFixed(0) + '%';
-        const memBar = document.getElementById('host-mem-bar');
-        memBar.style.width = h.mem_percent + '%'; memBar.className = 'bar h-full ' + barColor(h.mem_percent);
+        const nodes = d.nodes || [];
+        document.getElementById('host-name').textContent = h.hostname + ' + ' + nodes.length + ' node(s)';
 
-        const loadPct = h.cpu_count ? Math.min(h.load1 / h.cpu_count * 100, 100) : 0;
-        document.getElementById('host-load-val').textContent = h.load1.toFixed(2);
-        document.getElementById('host-cpu-count').textContent = h.cpu_count + ' cœurs';
+        // RAM agrégée sur TOUTES les nodes
+        const totRam = nodes.reduce((a,n)=>a+(n.mem_total_mb||0),0);
+        const usedRam = nodes.reduce((a,n)=>a+(n.mem_used_mb||0),0);
+        const ramPct = totRam ? usedRam/totRam*100 : 0;
+        document.getElementById('host-mem-val').textContent = fmtMB(usedRam) + ' / ' + fmtMB(totRam);
+        document.getElementById('host-mem-pct').textContent = ramPct.toFixed(0) + '%';
+        const memBar = document.getElementById('host-mem-bar');
+        memBar.style.width = ramPct + '%'; memBar.className = 'bar h-full ' + barColor(ramPct);
+
+        // CPU agrégé : cœurs totaux + charge cumulée des containers
+        const totCores = nodes.reduce((a,n)=>a+(n.cpu_count||0),0);
+        const aggCpu = (d.containers||[]).reduce((a,c)=>a+(c.cpu_percent||0),0);
+        const cpuPct = totCores ? Math.min(aggCpu/totCores,100) : 0;
+        document.getElementById('host-load-val').textContent = cpuPct.toFixed(0) + '%';
+        document.getElementById('host-cpu-count').textContent = totCores + ' cœurs · ' + nodes.length + ' nodes';
         const loadBar = document.getElementById('host-load-bar');
-        loadBar.style.width = loadPct + '%'; loadBar.className = 'bar h-full ' + barColor(loadPct);
+        loadBar.style.width = cpuPct + '%'; loadBar.className = 'bar h-full ' + barColor(cpuPct);
 
         document.getElementById('host-disk-val').textContent = h.disk_used_gb.toFixed(0) + ' / ' + h.disk_total_gb.toFixed(0) + ' GB';
         document.getElementById('host-disk-pct').textContent = h.disk_percent.toFixed(0) + '%';
@@ -204,23 +252,9 @@
 
         document.getElementById('ct-count').textContent = h.container_up + ' / ' + h.container_total;
 
-        // Nodes
-        document.getElementById('nodes').innerHTML = (d.nodes || []).map(n => {
-          const memPct = n.mem_total_mb ? Math.min(n.mem_used_mb / n.mem_total_mb * 100, 100) : 0;
-          return `
-            <div class="rounded-xl border ${n.online ? 'border-zinc-800' : 'border-red-900'} bg-zinc-900 p-5">
-              <div class="flex items-center justify-between mb-3">
-                <span class="font-semibold flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full ${n.online ? 'bg-green-400' : 'bg-red-500'}"></span>${n.id}
-                </span>
-                <span class="text-xs text-zinc-500">${n.cpu_count} cœurs · ${n.containers} containers</span>
-              </div>
-              <div class="flex justify-between text-xs mb-1"><span class="text-zinc-400">RAM serveurs</span><span class="font-mono">${fmtMB(n.mem_used_mb)} / ${fmtMB(n.mem_total_mb)}</span></div>
-              <div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden"><div class="bar h-full ${barColor(memPct)}" style="width:${memPct}%"></div></div>
-            </div>`;
-        }).join('');
-
-        document.getElementById('containers').innerHTML = d.containers.map(renderContainer).join('');
+        lastSnap = d;
+        renderNodes();
+        renderContainers();
 
         document.getElementById('last-update').textContent = 'à jour · ' + new Date(d.timestamp).toLocaleTimeString('fr-CA');
       } catch (e) {
