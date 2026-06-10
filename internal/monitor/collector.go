@@ -379,16 +379,22 @@ func (c *Collector) hostMetric(ctx context.Context) HostMetric {
 		h.Load1, h.Load5, h.Load15 = l1, l5, l15
 	}
 
-	// Disque via statfs sur le FS hôte monté
+	// Disque via statfs sur le FS hôte monté. On calque le calcul de `df` :
+	//  - used  = blocs totaux - blocs libres (Bfree, inclut les blocs réservés)
+	//  - avail = blocs dispo à l'utilisateur (Bavail, hors réservé root)
+	//  - %     = used / (used + avail)
+	// et on affiche en Gio (1<<30) comme `df -h`.
+	const giB = 1 << 30
 	var st unix.Statfs_t
 	if err := unix.Statfs(c.hostRoot, &st); err == nil {
 		bs := float64(st.Bsize)
 		total := float64(st.Blocks) * bs
-		free := float64(st.Bavail) * bs
-		h.DiskTotalGB = total / 1e9
-		h.DiskUsedGB = (total - free) / 1e9
-		if total > 0 {
-			h.DiskPercent = (total - free) / total * 100
+		used := float64(st.Blocks-st.Bfree) * bs
+		avail := float64(st.Bavail) * bs
+		h.DiskTotalGB = total / giB
+		h.DiskUsedGB = used / giB
+		if used+avail > 0 {
+			h.DiskPercent = used / (used + avail) * 100
 		}
 	}
 

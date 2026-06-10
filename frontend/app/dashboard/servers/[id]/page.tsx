@@ -319,6 +319,36 @@ export default function ServerPage() {
           )}
         </div>
 
+        {/* Version Minecraft */}
+        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+          <div className="flex items-center gap-2 font-semibold mb-1">
+            <RefreshCw className="w-5 h-5 text-green-400" /> Version Minecraft
+          </div>
+          <p className="text-sm text-zinc-500 mb-4">
+            Version actuelle : <span className="text-zinc-300">{server.version === "LATEST" ? "dernière (LATEST)" : server.version}</span>.
+            Changer la version <span className="text-zinc-400">redémarre le serveur</span> — le monde et les configs sont conservés.
+          </p>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedVersion}
+              onChange={(e) => setSelectedVersion(e.target.value)}
+              className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+            >
+              <option value="">Choisir une version…</option>
+              {VERSIONS.filter((v) => v !== server.version).map((v) => (
+                <option key={v} value={v}>{v === "LATEST" ? "Dernière version" : v}</option>
+              ))}
+            </select>
+            <button
+              onClick={changeVersion}
+              disabled={!selectedVersion || changingVersion}
+              className="bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+            >
+              {changingVersion ? "Application..." : "Appliquer"}
+            </button>
+          </div>
+        </div>
+
         {/* Console */}
         <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
           <div className="flex items-center justify-between mb-3">
@@ -355,36 +385,6 @@ export default function ServerPage() {
           ) : (
             <p className="text-sm text-zinc-500">Démarre le serveur pour accéder à la console et voir les joueurs connectés.</p>
           )}
-        </div>
-
-        {/* Version Minecraft */}
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
-          <div className="flex items-center gap-2 font-semibold mb-1">
-            <RefreshCw className="w-5 h-5 text-green-400" /> Version Minecraft
-          </div>
-          <p className="text-sm text-zinc-500 mb-4">
-            Version actuelle : <span className="text-zinc-300">{server.version === "LATEST" ? "dernière (LATEST)" : server.version}</span>.
-            Changer la version <span className="text-zinc-400">redémarre le serveur</span> — le monde et les configs sont conservés.
-          </p>
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedVersion}
-              onChange={(e) => setSelectedVersion(e.target.value)}
-              className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
-            >
-              <option value="">Choisir une version…</option>
-              {VERSIONS.filter((v) => v !== server.version).map((v) => (
-                <option key={v} value={v}>{v === "LATEST" ? "Dernière version" : v}</option>
-              ))}
-            </select>
-            <button
-              onClick={changeVersion}
-              disabled={!selectedVersion || changingVersion}
-              className="bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-medium px-5 py-2 rounded-lg transition-colors"
-            >
-              {changingVersion ? "Application..." : "Appliquer"}
-            </button>
-          </div>
         </div>
 
         {/* Sections à venir */}

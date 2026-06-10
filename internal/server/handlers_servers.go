@@ -326,16 +326,10 @@ func (s *Server) handleUpgradeServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NOTE: la facturation (Stripe/BTCPay) viendra en Phase 3. Pour l'instant
-	// l'upgrade applique directement les nouvelles ressources.
-	if gs.ContainerID != "" {
-		if err := node.UpdateResources(r.Context(), gs.ContainerID, plan.RAMMb, plan.CPUCores); err != nil {
-			slog.Error("upgrade: update resources failed", "id", gs.ID, "err", err)
-			http.Error(w, "failed to apply new resources", http.StatusInternalServerError)
-			return
-		}
-	}
-
+	// NOTE: la facturation (PayPal) est gérée séparément (handlers_billing).
+	// Le nombre de slots (MAX_PLAYERS) est une variable d'env immuable : pour
+	// qu'il évolue avec le plan, on recrée le container (RAM, CPU et MAX_PLAYERS
+	// appliqués d'un coup). Le volume de données — donc le monde — est conservé.
 	if err := s.serverRepo.UpdatePlan(r.Context(), gs.ID, plan.Name, plan.RAMMb, plan.CPUCores); err != nil {
 		http.Error(w, "database error", http.StatusInternalServerError)
 		return
@@ -344,6 +338,12 @@ func (s *Server) handleUpgradeServer(w http.ResponseWriter, r *http.Request) {
 	gs.Plan = plan.Name
 	gs.RAMMb = plan.RAMMb
 	gs.CPUCores = plan.CPUCores
+
+	if gs.ContainerID != "" {
+		s.serverRepo.UpdateStatus(r.Context(), gs.ID, "creating")
+		go s.recreateServer(gs, node, plan, gs.Version)
+		gs.Status = "creating"
+	}
 	respond(w, http.StatusOK, gs)
 }
 

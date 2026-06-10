@@ -16,7 +16,7 @@ var plans = map[string]Plan{
 	"starter":  {Name: "starter", RAMMb: 2048, CPUCores: 1.0, MaxSlots: 20, PriceCents: 300},
 	"standard": {Name: "standard", RAMMb: 4096, CPUCores: 2.0, MaxSlots: 50, PriceCents: 700},
 	"pro":      {Name: "pro", RAMMb: 8192, CPUCores: 4.0, MaxSlots: 100, PriceCents: 1400},
-	"extreme":  {Name: "extreme", RAMMb: 16384, CPUCores: 6.0, MaxSlots: 0, PriceCents: 2500},
+	"extreme":  {Name: "extreme", RAMMb: 16384, CPUCores: 6.0, MaxSlots: 200, PriceCents: 2500},
 }
 
 // PriceString retourne le prix formaté en dollars (ex: "7.00").

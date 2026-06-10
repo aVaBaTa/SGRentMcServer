@@ -393,6 +393,10 @@ L'architecture modulaire (image Docker par jeu, même orchestrateur) permet d'aj
 - **Alternative à faible trafic : affiliation** sur le blog (matériel gaming, clés de jeux) — rapporte plus qu'AdSense à bas volume, moins intrusif.
 - Défauts à prévoir quand on l'active : ID éditeur `ca-pub-XXXX` en variable d'env/config, composant `<AdSlot>` blog-only, script AdSense chargé conditionnellement (pages blog seulement), `app/confidentialite` (politique requise).
 - Statut : non implémenté, à activer quand AdSense approuvé.
+- [ ] **Collecte de données clients pour la pub/marketing** (TODO) : constituer une liste exploitable des clients pour le ciblage publicitaire et le remarketing.
+  - Données déjà en base (`users`) : email, pseudo Discord, plan, nombre de serveurs, date d'inscription → base d'une liste d'audience.
+  - Pistes : export segmenté (plan payant vs gratuit, actifs/inactifs), audiences personnalisées Google Ads / remarketing (Customer Match via emails hashés), relances email (Brevo) pour upsell.
+  - ⚠️ Prérequis légal : consentement + politique de confidentialité (`app/confidentialite`) avant tout usage marketing des emails (Loi 25 Québec / RGPD). Ne pas exposer ces données publiquement.
 
 ### Phase 6 — Marketing, SEO & acquisition
 - [x] Bases SEO techniques ✓ (2026-06-09) : `app/robots.ts` (/robots.txt), `app/sitemap.ts` (/sitemap.xml), metadata enrichies (title/description mots-clés, OpenGraph, canonical, keywords FR Québec)
