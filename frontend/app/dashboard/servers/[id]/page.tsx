@@ -389,7 +389,6 @@ export default function ServerPage() {
 
         {/* Sections à venir */}
         {[
-          { title: "Console", desc: "Terminal temps réel — bientôt disponible" },
           { title: "Mods & Plugins", desc: "Gestion des mods — bientôt disponible" },
           { title: "Fichiers", desc: "Explorateur de fichiers — bientôt disponible" },
           { title: "Joueurs", desc: "Whitelist, banlist, ops — bientôt disponible" },
