@@ -388,6 +388,23 @@ L'architecture modulaire (image Docker par jeu, même orchestrateur) permet d'aj
 - [ ] Auth custom email+password (en plus de Discord)
 - [ ] Autres jeux (Satisfactory, Rust, ARK)
 
+### Phase 7 — Connexion (auth) élargie (PLANIFIÉ — demande utilisateur 2026-06-10)
+> Aujourd'hui : connexion **Discord OAuth uniquement**. Objectif : plus de méthodes.
+- [ ] **Email + mot de passe** (inscription, login, hash bcrypt/argon2, vérification email via le serveur mail SGMail, reset password).
+- [ ] **OAuth additionnels** : Google, GitHub, Microsoft (réutiliser le flow OAuth existant, généraliser `internal/auth`).
+- [ ] Lier plusieurs méthodes à un même compte (table `auth_identities` : provider + provider_id → user).
+- [ ] 2FA optionnel (TOTP) plus tard.
+- [ ] UI : page de connexion dédiée avec choix des méthodes (au lieu du bouton Discord direct).
+
+### Phase 8 — Loaders & mods (Forge / Fabric / FTB) (PLANIFIÉ — demande utilisateur 2026-06-10)
+> Aujourd'hui : `TYPE=PAPER` figé. Objectif : choix du loader + modpacks + mods.
+- [ ] **Choix du loader à la création / via la page serveur** : Paper (actuel), **Forge**, **Fabric**, **NeoForge**, Quilt, Spigot, Vanilla. L'image `itzg/minecraft-server` les supporte tous via `TYPE=` + variables (`FORGE_VERSION`, `FABRIC_LOADER_VERSION`, etc.). Changement de loader = recréation du container (comme le changement de version), monde conservé.
+- [ ] **Modpacks** : import **FTB** (`TYPE=FTBA` + `FTB_MODPACK_ID`/`FTB_MODPACK_VERSION_ID`), **CurseForge** (`TYPE=AUTO_CURSEFORGE` + `CF_SLUG`/`CF_FILE_ID`, nécessite une **clé API CurseForge**), **Modrinth** (`TYPE=MODRINTH` + `MODRINTH_PROJECT`). Sélecteur de modpack dans le panel.
+- [ ] **Mods individuels** : recherche/installation depuis **Modrinth** (API publique) et CurseForge, dépôt dans `/data/mods` (déjà possible via le gestionnaire de fichiers ; ajouter une UI dédiée + auto-download par URL/slug).
+- [ ] Adapter les plans/RAM : les modpacks lourds (FTB/CF) demandent plus de RAM → vérifier l'adéquation plan ↔ modpack, avertir l'utilisateur.
+- [ ] Backend : étendre `minecraftEnv()` (loader + modpack vars), champ `loader`/`modpack` sur `game_servers`, endpoints de changement de loader/modpack (recréation async comme version).
+- [ ] Frontend : carte « Loader & Modpack » sur la page serveur (sélecteurs), + onglet Mods (recherche Modrinth/CF, installer/désinstaller).
+
 ### Monétisation publicitaire (OPTIONNEL — note)
 > Revenu principal = plans payants. La pub est secondaire et à faire avec prudence.
 - **NE PAS** mettre de pub sur l'app/dashboard/accueil (nuit aux conversions, viole souvent les règles AdSense, looks "cheap" pour un service payant).
