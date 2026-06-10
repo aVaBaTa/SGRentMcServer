@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal } from "lucide-react";
+import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus } from "lucide-react";
 
 const VERSIONS = ["LATEST", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.18.2", "1.16.5", "1.12.2", "1.8.9"];
 
@@ -57,6 +57,12 @@ export default function ServerPage() {
   const [command, setCommand] = useState("");
   const [sending, setSending] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
+
+  // Gestion des joueurs
+  const [lists, setLists] = useState<{ whitelist: string[]; banned: string[] }>({ whitelist: [], banned: [] });
+  const [newPlayer, setNewPlayer] = useState("");
+  const [playerAct, setPlayerAct] = useState("whitelist_add");
+  const [actBusy, setActBusy] = useState(false);
 
   // Charge la config billing + le SDK PayPal
   useEffect(() => {
@@ -125,9 +131,10 @@ export default function ServerPage() {
     if (!running) { setPlayers(null); return; }
     const tick = async () => {
       try {
-        const [p, l] = await Promise.all([
+        const [p, l, pl] = await Promise.all([
           fetch(`${API}/api/v1/servers/${id}/players`, { credentials: "include" }),
           fetch(`${API}/api/v1/servers/${id}/logs?tail=200`, { credentials: "include" }),
+          fetch(`${API}/api/v1/servers/${id}/playerlists`, { credentials: "include" }),
         ]);
         if (p.ok) setPlayers(await p.json());
         if (l.ok) {
@@ -135,12 +142,37 @@ export default function ServerPage() {
           setLogs((await l.json()).logs ?? "");
           if (stick) requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; });
         }
+        if (pl.ok) {
+          const d = await pl.json();
+          setLists({ whitelist: d.whitelist ?? [], banned: d.banned ?? [] });
+        }
       } catch { /* serveur pas prêt */ }
     };
     tick();
     const t = setInterval(tick, 5000);
     return () => clearInterval(t);
   }, [id, running]);
+
+  async function doPlayerAction(action: string, player: string) {
+    const p = player.trim();
+    if (!p || actBusy) return;
+    setActBusy(true);
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/players/action`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, player: p }),
+      });
+      if (res.ok) {
+        const out = (await res.json()).output ?? "";
+        if (out) setLogs((prev) => prev + `\n> ${action} ${p}\n${out}`.trimEnd() + "\n");
+        setNewPlayer("");
+      }
+    } finally {
+      setActBusy(false);
+    }
+  }
 
   async function sendCommand(e: React.FormEvent) {
     e.preventDefault();
@@ -387,11 +419,102 @@ export default function ServerPage() {
           )}
         </div>
 
+        {/* Gestion des joueurs */}
+        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+          <div className="flex items-center gap-2 font-semibold mb-4">
+            <Shield className="w-5 h-5 text-green-400" /> Joueurs
+          </div>
+          {running ? (
+            <div className="flex flex-col gap-5">
+              {/* Connectés */}
+              <div>
+                <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Connectés ({players?.online ?? 0})</div>
+                {players && players.players.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {players.players.map((p) => (
+                      <div key={p} className="flex items-center justify-between gap-2 rounded-lg bg-black/30 px-3 py-2">
+                        <span className="font-medium text-sm truncate">{p}</span>
+                        <div className="flex gap-1.5 shrink-0">
+                          <button onClick={() => doPlayerAction("op", p)} disabled={actBusy} title="Donner OP"
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-green-900/60 text-green-400 disabled:opacity-40 transition-colors"><Shield className="w-3.5 h-3.5" />OP</button>
+                          <button onClick={() => doPlayerAction("kick", p)} disabled={actBusy} title="Expulser"
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-yellow-900/60 text-yellow-400 disabled:opacity-40 transition-colors"><UserMinus className="w-3.5 h-3.5" />Kick</button>
+                          <button onClick={() => doPlayerAction("ban", p)} disabled={actBusy} title="Bannir"
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-red-900/60 text-red-400 disabled:opacity-40 transition-colors"><Ban className="w-3.5 h-3.5" />Ban</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-zinc-600">Aucun joueur connecté.</p>
+                )}
+              </div>
+
+              {/* Action par pseudo */}
+              <div>
+                <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Ajouter / gérer par pseudo</div>
+                <form onSubmit={(e) => { e.preventDefault(); doPlayerAction(playerAct, newPlayer); }} className="flex flex-wrap gap-2">
+                  <input
+                    value={newPlayer}
+                    onChange={(e) => setNewPlayer(e.target.value)}
+                    placeholder="Pseudo Minecraft"
+                    className="flex-1 min-w-[140px] bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500"
+                  />
+                  <select value={playerAct} onChange={(e) => setPlayerAct(e.target.value)}
+                    className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500">
+                    <option value="whitelist_add">Whitelist +</option>
+                    <option value="whitelist_remove">Whitelist −</option>
+                    <option value="op">Donner OP</option>
+                    <option value="deop">Retirer OP</option>
+                    <option value="ban">Bannir</option>
+                    <option value="pardon">Débannir</option>
+                  </select>
+                  <button type="submit" disabled={actBusy || !newPlayer.trim()}
+                    className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+                    <UserPlus className="w-4 h-4" /> Appliquer
+                  </button>
+                </form>
+              </div>
+
+              {/* Listes */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Whitelist ({lists.whitelist.length})</div>
+                  {lists.whitelist.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {lists.whitelist.map((p) => (
+                        <button key={p} onClick={() => doPlayerAction("whitelist_remove", p)} title="Retirer de la whitelist"
+                          className="group flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-green-500/10 text-green-300 hover:bg-red-900/50 hover:text-red-300 transition-colors">
+                          {p} <span className="opacity-50 group-hover:opacity-100">×</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-zinc-600">Vide.</p>}
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Bannis ({lists.banned.length})</div>
+                  {lists.banned.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {lists.banned.map((p) => (
+                        <button key={p} onClick={() => doPlayerAction("pardon", p)} title="Débannir"
+                          className="group flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-red-500/10 text-red-300 hover:bg-green-900/50 hover:text-green-300 transition-colors">
+                          {p} <span className="opacity-50 group-hover:opacity-100">×</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-zinc-600">Aucun.</p>}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-500">Démarre le serveur pour gérer les joueurs (OP, kick, ban, whitelist).</p>
+          )}
+        </div>
+
         {/* Sections à venir */}
         {[
           { title: "Mods & Plugins", desc: "Gestion des mods — bientôt disponible" },
           { title: "Fichiers", desc: "Explorateur de fichiers — bientôt disponible" },
-          { title: "Joueurs", desc: "Whitelist, banlist, ops — bientôt disponible" },
         ].map(({ title, desc }) => (
           <div key={title} className="border border-dashed border-zinc-800 rounded-xl p-6">
             <div className="font-semibold mb-1">{title}</div>

@@ -90,6 +90,8 @@ func (s *Server) mountRoutes() {
 			r.Post("/{id}/upgrade", s.handleUpgradeServer)
 			r.Post("/{id}/version", s.handleChangeVersion)
 			r.Get("/{id}/players", s.handleServerPlayers)
+			r.Get("/{id}/playerlists", s.handlePlayerLists)
+			r.Post("/{id}/players/action", s.handlePlayerAction)
 			r.Get("/{id}/logs", s.handleServerLogs)
 			r.Post("/{id}/command", s.handleServerCommand)
 			r.Post("/{id}/checkout/paypal", s.handleCreatePayPalOrder)
