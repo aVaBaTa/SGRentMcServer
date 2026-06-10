@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   Zap, Cpu, Shield, Star, Check, Headphones,
-  Puzzle, RefreshCw, ShieldCheck, Gauge,
+  Puzzle, RefreshCw, ShieldCheck, Gauge, ChevronDown,
 } from "lucide-react";
 import {
   useI18n, PLANS, PERIODS, priceFor, fmtMoney, currencyCode, type Period,
@@ -27,6 +27,17 @@ const jsonLd = {
 export default function MinecraftHosting() {
   const { t, lang } = useI18n();
   const [period, setPeriod] = useState<Period>("monthly");
+  const [faqOpen, setFaqOpen] = useState<number | null>(0);
+
+  const faqLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: t.faq.items.map((it) => ({
+      "@type": "Question",
+      name: it.q,
+      acceptedAnswer: { "@type": "Answer", text: it.a },
+    })),
+  };
 
   const badges = [
     { icon: Zap, label: t.badges.setup },
@@ -184,6 +195,37 @@ export default function MinecraftHosting() {
                 >
                   {isFree ? t.pricing.ctaFree : t.pricing.ctaChoose}
                 </a>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="px-6 pb-32 max-w-3xl mx-auto w-full">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }} />
+        <h2 className="text-3xl font-bold text-center mb-2">{t.faq.heading}</h2>
+        <p className="text-zinc-500 text-center mb-10">{t.faq.sub}</p>
+
+        <div className="flex flex-col gap-3">
+          {t.faq.items.map((item, i) => {
+            const open = faqOpen === i;
+            return (
+              <div key={i} className="border border-zinc-800 rounded-xl bg-zinc-900 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setFaqOpen(open ? null : i)}
+                  aria-expanded={open}
+                  className="w-full flex items-center justify-between gap-4 text-left px-5 py-4 hover:bg-zinc-800/50 transition-colors"
+                >
+                  <span className="font-medium">{item.q}</span>
+                  <ChevronDown className={`w-5 h-5 shrink-0 text-green-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+                </button>
+                <div className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                  <div className="overflow-hidden">
+                    <p className="px-5 pb-4 text-sm text-zinc-400 leading-relaxed">{item.a}</p>
+                  </div>
+                </div>
               </div>
             );
           })}

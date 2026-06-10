@@ -45,14 +45,25 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		req.Version = "LATEST"
 	}
 
+	gameDef, err := servers.GetGame(req.Game)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	plan, err := servers.GetPlan(req.Plan)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	// Plancher de ressources par jeu : un serveur Satisfactory tourne en 4 Go
+	// même sur le plan "free" (offert pour l'instant). Le label de plan et la
+	// facturation restent inchangés ; seules les ressources réelles sont relevées.
+	ramMb, cpuCores := gameDef.ApplyFloor(plan.RAMMb, plan.CPUCores)
+
 	// Choisir le meilleur node
-	node, err := s.orch.BestNode(r.Context(), plan.RAMMb)
+	node, err := s.orch.BestNode(r.Context(), ramMb)
 	if err != nil {
 		slog.Error("no available node", "err", err)
 		http.Error(w, "no capacity available, try again later", http.StatusServiceUnavailable)
@@ -78,8 +89,8 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		Version:   req.Version,
 		Node:      node.ID,
 		Status:    "creating",
-		RAMMb:     plan.RAMMb,
-		CPUCores:  plan.CPUCores,
+		RAMMb:     ramMb,
+		CPUCores:  cpuCores,
 		Port:      port,
 	}
 
@@ -97,10 +108,45 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusCreated, gs)
 }
 
+// buildSpec assemble le ServerSpec à partir de la définition du jeu. Les
+// ressources (RAM/CPU) proviennent du GameServer (déjà passées au plancher du
+// jeu) ; les ports, le volume, l'env et le routing dépendent du jeu.
+func (s *Server) buildSpec(gs *servers.GameServer, gameDef servers.GameDef, plan servers.Plan, version string) orchestrator.ServerSpec {
+	spec := orchestrator.ServerSpec{
+		ContainerName: fmt.Sprintf("sgrent-%s", gs.ID),
+		Image:         gameDef.Image,
+		RAMMb:         gs.RAMMb,
+		CPUCores:      gs.CPUCores,
+		DataPath:      gameDef.DataPath,
+		Subdomain:     gs.Subdomain,
+		Network:       s.cfg.MCNetwork,
+		EnvVars:       gameDef.Env(plan, version, gs.Port),
+	}
+	for _, p := range gameDef.Ports(gs.Port) {
+		spec.Ports = append(spec.Ports, orchestrator.PortBinding{
+			HostPort: p.HostPort, Internal: p.Internal, Proto: p.Proto,
+		})
+	}
+	// Routing par hostname réservé à Minecraft (mc-router). Les autres jeux
+	// passent par l'accès direct IP:port.
+	if gameDef.UsesMCRouter {
+		spec.RouterHost = gs.Subdomain + "." + s.cfg.ServersDomain
+		spec.RouterPort = gameDef.RouterPort
+	}
+	return spec
+}
+
 // provisionServer crée et démarre le container en arrière-plan.
 func (s *Server) provisionServer(gs *servers.GameServer, game string, port int, subdomain string, plan servers.Plan) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+
+	gameDef, err := servers.GetGame(game)
+	if err != nil {
+		slog.Error("provision: unknown game", "id", gs.ID, "game", game, "err", err)
+		s.serverRepo.UpdateStatus(ctx, gs.ID, "error")
+		return
+	}
 
 	node, err := s.orch.NodeByID(gs.Node)
 	if err != nil {
@@ -109,17 +155,7 @@ func (s *Server) provisionServer(gs *servers.GameServer, game string, port int, 
 		return
 	}
 
-	containerID, err := node.CreateServer(ctx, orchestrator.ServerSpec{
-		ContainerName: fmt.Sprintf("sgrent-%s", gs.ID),
-		Image:         gameImage(game),
-		RAMMb:         plan.RAMMb,
-		CPUCores:      plan.CPUCores,
-		Port:          port,
-		Subdomain:     subdomain,
-		RouterHost:    subdomain + "." + s.cfg.ServersDomain,
-		Network:       s.cfg.MCNetwork,
-		EnvVars:       minecraftEnv(plan, gs.Version),
-	})
+	containerID, err := node.CreateServer(ctx, s.buildSpec(gs, gameDef, plan, gs.Version))
 	if err != nil {
 		slog.Error("provision: create container failed", "id", gs.ID, "err", err)
 		s.serverRepo.UpdateStatus(ctx, gs.ID, "error")
@@ -269,6 +305,13 @@ func (s *Server) recreateServer(gs *servers.GameServer, node *orchestrator.Node,
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	gameDef, err := servers.GetGame(gs.Game)
+	if err != nil {
+		slog.Error("recreate: unknown game", "id", gs.ID, "game", gs.Game, "err", err)
+		s.serverRepo.UpdateStatus(ctx, gs.ID, "error")
+		return
+	}
+
 	if gs.ContainerID != "" {
 		node.StopServer(ctx, gs.ContainerID)
 		if err := node.RemoveServer(ctx, gs.ContainerID); err != nil {
@@ -276,17 +319,7 @@ func (s *Server) recreateServer(gs *servers.GameServer, node *orchestrator.Node,
 		}
 	}
 
-	containerID, err := node.CreateServer(ctx, orchestrator.ServerSpec{
-		ContainerName: fmt.Sprintf("sgrent-%s", gs.ID),
-		Image:         gameImage(gs.Game),
-		RAMMb:         plan.RAMMb,
-		CPUCores:      plan.CPUCores,
-		Port:          gs.Port,
-		Subdomain:     gs.Subdomain,
-		RouterHost:    gs.Subdomain + "." + s.cfg.ServersDomain,
-		Network:       s.cfg.MCNetwork,
-		EnvVars:       minecraftEnv(plan, version),
-	})
+	containerID, err := node.CreateServer(ctx, s.buildSpec(gs, gameDef, plan, version))
 	if err != nil {
 		slog.Error("recreate: create container failed", "id", gs.ID, "err", err)
 		s.serverRepo.UpdateStatus(ctx, gs.ID, "error")
@@ -326,18 +359,27 @@ func (s *Server) handleUpgradeServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Plancher de ressources par jeu (même logique qu'à la création) : un
+	// downgrade ne doit pas descendre un serveur Satisfactory sous son minimum.
+	gameDef, err := servers.GetGame(gs.Game)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	ramMb, cpuCores := gameDef.ApplyFloor(plan.RAMMb, plan.CPUCores)
+
 	// NOTE: la facturation (PayPal) est gérée séparément (handlers_billing).
 	// Le nombre de slots (MAX_PLAYERS) est une variable d'env immuable : pour
 	// qu'il évolue avec le plan, on recrée le container (RAM, CPU et MAX_PLAYERS
 	// appliqués d'un coup). Le volume de données — donc le monde — est conservé.
-	if err := s.serverRepo.UpdatePlan(r.Context(), gs.ID, plan.Name, plan.RAMMb, plan.CPUCores); err != nil {
+	if err := s.serverRepo.UpdatePlan(r.Context(), gs.ID, plan.Name, ramMb, cpuCores); err != nil {
 		http.Error(w, "database error", http.StatusInternalServerError)
 		return
 	}
 
 	gs.Plan = plan.Name
-	gs.RAMMb = plan.RAMMb
-	gs.CPUCores = plan.CPUCores
+	gs.RAMMb = ramMb
+	gs.CPUCores = cpuCores
 
 	if gs.ContainerID != "" {
 		s.serverRepo.UpdateStatus(r.Context(), gs.ID, "creating")
@@ -363,41 +405,13 @@ func (s *Server) resolveServer(r *http.Request) (*servers.GameServer, *orchestra
 	return gs, node, nil
 }
 
-func gameImage(game string) string {
-	switch game {
-	case "minecraft":
-		return "itzg/minecraft-server:latest"
-	default:
-		return "itzg/minecraft-server:latest"
-	}
-}
-
-// minecraftEnv : config pour l'image itzg/minecraft-server.
-// TYPE=PAPER → performant + support plugins. Moddable via Fabric/Forge plus tard.
-// version : "LATEST", "1.21.4", etc.
-func minecraftEnv(plan servers.Plan, version string) []string {
-	if version == "" {
-		version = "LATEST"
-	}
-	// MEMORY = tas JVM = la RAM annoncée du plan. La limite mémoire du container
-	// (HostConfig.Memory) est volontairement plus haute pour laisser de la marge
-	// au non-heap (metaspace, threads, buffers directs, GC) — voir container.go.
-	env := []string{
-		"EULA=TRUE",
-		"TYPE=PAPER",
-		"VERSION=" + version,
-		fmt.Sprintf("MEMORY=%dM", plan.RAMMb),
-		"USE_AIKAR_FLAGS=true",
-	}
-	if plan.MaxSlots > 0 {
-		env = append(env, fmt.Sprintf("MAX_PLAYERS=%d", plan.MaxSlots))
-	}
-	return env
-}
-
 // registerRoute enregistre la route mc-router : hostname → IP_LAN_du_node:port.
-// Fonctionne pour n'importe quel node (routing cross-host).
+// Fonctionne pour n'importe quel node (routing cross-host). Réservé aux jeux qui
+// utilisent mc-router (Minecraft) ; les autres passent par l'accès IP:port direct.
 func (s *Server) registerRoute(ctx context.Context, gs *servers.GameServer) {
+	if def, err := servers.GetGame(gs.Game); err != nil || !def.UsesMCRouter {
+		return
+	}
 	if !s.mcRouter.Configured() {
 		return
 	}
@@ -425,6 +439,9 @@ func (s *Server) registerRoute(ctx context.Context, gs *servers.GameServer) {
 }
 
 func (s *Server) unregisterRoute(ctx context.Context, gs *servers.GameServer) {
+	if def, err := servers.GetGame(gs.Game); err != nil || !def.UsesMCRouter {
+		return
+	}
 	if s.mcRouter.Configured() {
 		s.mcRouter.Unregister(ctx, gs.Subdomain+"."+s.cfg.ServersDomain)
 	}

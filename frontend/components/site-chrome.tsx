@@ -4,8 +4,7 @@ import { Server } from "lucide-react";
 import { useI18n, type Lang } from "@/lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-// TODO: remplacer par le vrai lien d'invitation du serveur Discord Playrena.
-const DISCORD_INVITE = "#";
+const DISCORD_INVITE = "https://discord.gg/3knNHXqpNG";
 
 type IconProps = { className?: string };
 const SVG = ({ className = "", d }: IconProps & { d: string }) => (
@@ -17,7 +16,7 @@ const YoutubeIcon = (p: IconProps) => <SVG {...p} d="M23.5 6.2a3 3 0 0 0-2.1-2.1
 const InstagramIcon = (p: IconProps) => <SVG {...p} d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.43.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.43.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 0 1-1.38-.9 3.7 3.7 0 0 1-.9-1.38c-.16-.43-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.43-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16Zm0 4.92a4.92 4.92 0 1 0 0 9.84 4.92 4.92 0 0 0 0-9.84Zm0 8.12a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4Zm6.27-8.31a1.15 1.15 0 1 1-2.3 0 1.15 1.15 0 0 1 2.3 0Z" />;
 const TwitchIcon = (p: IconProps) => <SVG {...p} d="M4.265 0 1.5 4.143v15.43h5.18V24h2.765l2.765-4.427h4.15L21.75 14.4V0H4.265Zm15.64 13.38-3.318 3.318h-4.15l-2.765 2.765v-2.765H5.18V1.66h14.725v11.72ZM16.68 5.024v6.083h-1.844V5.024h1.844Zm-4.98 0v6.083H9.857V5.024H11.7Z" />;
 
-function LanguageSwitcher() {
+export function LanguageSwitcher() {
   const { lang, setLang } = useI18n();
   const Btn = ({ l, label }: { l: Lang; label: string }) => (
     <button

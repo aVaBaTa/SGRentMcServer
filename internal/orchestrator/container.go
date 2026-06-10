@@ -15,16 +15,26 @@ import (
 	"github.com/docker/go-connections/nat"
 )
 
+// PortBinding décrit un port à publier : port hôte → port interne du container,
+// pour un protocole donné.
+type PortBinding struct {
+	HostPort int
+	Internal int
+	Proto    string // "tcp" | "udp"
+}
+
 // ServerSpec décrit un serveur de jeu à créer.
 type ServerSpec struct {
 	ContainerName string
 	Image         string // ex: "itzg/minecraft-server:latest"
 	RAMMb         int64
 	CPUCores      float64
-	Port          int      // port hôte (accès direct IP:port)
-	Subdomain     string   // sous-domaine
-	RouterHost    string   // hostname complet pour mc-router (ex: avabata.servers.vbt-prog.com)
-	Network       string   // réseau Docker partagé avec mc-router (ex: mc-net)
+	Ports         []PortBinding // ports à publier (accès direct IP:port)
+	DataPath      string        // point de montage du volume nommé (ex: "/data", "/config")
+	Subdomain     string        // sous-domaine
+	RouterHost    string        // hostname complet pour mc-router ; vide → pas de label mc-router
+	RouterPort    int           // port interne ciblé par mc-router (ex: 25565)
+	Network       string        // réseau Docker partagé avec mc-router (ex: mc-net)
 	EnvVars       []string
 }
 
@@ -34,30 +44,32 @@ func (n *Node) CreateServer(ctx context.Context, spec ServerSpec) (string, error
 		return "", fmt.Errorf("pull image: %w", err)
 	}
 
-	// MC écoute toujours sur 25565 dans le container ; on mappe le port hôte
-	// dynamique (spec.Port) vers ce port interne fixe.
-	const mcInternalPort = "25565/tcp"
-	hostPortStr := strconv.Itoa(spec.Port)
-	containerPort := nat.Port(mcInternalPort)
+	// Construit les ports exposés + bindings hôte à partir de spec.Ports.
+	// Chaque jeu décide de ses ports/protocoles (cf. internal/servers/games.go).
+	exposed := nat.PortSet{}
+	bindings := nat.PortMap{}
+	for _, p := range spec.Ports {
+		cp := nat.Port(fmt.Sprintf("%d/%s", p.Internal, p.Proto))
+		exposed[cp] = struct{}{}
+		bindings[cp] = []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: strconv.Itoa(p.HostPort)}}
+	}
 
 	labels := map[string]string{
 		"sgrent.managed":   "true",
 		"sgrent.ram_mb":    strconv.FormatInt(spec.RAMMb, 10),
 		"sgrent.subdomain": spec.Subdomain,
 	}
-	// Label mc-router : route hostname → ce container (port interne 25565).
+	// Label mc-router : route hostname → ce container (Minecraft uniquement).
 	if spec.RouterHost != "" {
 		labels["mc-router.host"] = spec.RouterHost
-		labels["mc-router.port"] = "25565"
+		labels["mc-router.port"] = strconv.Itoa(spec.RouterPort)
 	}
 
 	cfg := &container.Config{
-		Image:  spec.Image,
-		Labels: labels,
-		Env:    spec.EnvVars,
-		ExposedPorts: nat.PortSet{
-			containerPort: struct{}{},
-		},
+		Image:        spec.Image,
+		Labels:       labels,
+		Env:          spec.EnvVars,
+		ExposedPorts: exposed,
 	}
 
 	// Volume nommé persistant pour les données du serveur (monde, configs, mods).
@@ -65,10 +77,8 @@ func (n *Node) CreateServer(ctx context.Context, spec ServerSpec) (string, error
 	dataVolume := spec.ContainerName + "-data"
 
 	hostCfg := &container.HostConfig{
-		PortBindings: nat.PortMap{
-			containerPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: hostPortStr}},
-		},
-		Binds: []string{dataVolume + ":/data"},
+		PortBindings: bindings,
+		Binds:        []string{dataVolume + ":" + spec.DataPath},
 		Resources: container.Resources{
 			Memory:     containerMemBytes(spec.RAMMb),
 			MemorySwap: containerMemBytes(spec.RAMMb),

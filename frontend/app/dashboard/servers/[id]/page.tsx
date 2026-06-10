@@ -4,15 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
+import { LanguageSwitcher } from "@/components/site-chrome";
 
 const VERSIONS = ["LATEST", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.18.2", "1.16.5", "1.12.2", "1.8.9"];
 
 const PLANS = [
-  { id: "free", label: "Gratuit", specs: "1 GB · 1 cœur", price: "0$" },
-  { id: "starter", label: "Starter", specs: "2 GB · 1 cœur", price: "3$/mo" },
-  { id: "standard", label: "Standard", specs: "4 GB · 2 cœurs", price: "7$/mo" },
-  { id: "pro", label: "Pro", specs: "8 GB · 4 cœurs", price: "14$/mo" },
-  { id: "extreme", label: "Extreme", specs: "16 GB · 6 cœurs", price: "25$/mo" },
+  { id: "free", ram: "1 GB", cores: 1, price: "0$" },
+  { id: "starter", ram: "2 GB", cores: 1, price: "3$/mo" },
+  { id: "standard", ram: "4 GB", cores: 2, price: "7$/mo" },
+  { id: "pro", ram: "8 GB", cores: 4, price: "14$/mo" },
+  { id: "extreme", ram: "16 GB", cores: 6, price: "25$/mo" },
 ];
 
 interface GameServer {
@@ -30,24 +32,18 @@ interface GameServer {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-const STATUS: Record<string, { label: string; dot: string; text: string; pulse?: boolean }> = {
-  running:  { label: "En ligne",        dot: "bg-green-500",  text: "text-green-400" },
-  creating: { label: "Initialisation…", dot: "bg-yellow-500", text: "text-yellow-400", pulse: true },
-  stopped:  { label: "Arrêté",          dot: "bg-zinc-500",   text: "text-zinc-400" },
-  error:    { label: "Erreur",          dot: "bg-red-500",    text: "text-red-400" },
-};
-const statusOf = (s: string) => STATUS[s] ?? { label: s, dot: "bg-zinc-500", text: "text-zinc-400" };
-
-const fmtBytes = (n: number) => {
-  if (n < 1024) return n + " o";
-  if (n < 1048576) return (n / 1024).toFixed(0) + " Ko";
-  if (n < 1073741824) return (n / 1048576).toFixed(1) + " Mo";
-  return (n / 1073741824).toFixed(2) + " Go";
+// Couleurs/animation par statut — les libellés viennent du dictionnaire i18n.
+const STATUS_META: Record<string, { dot: string; text: string; pulse?: boolean }> = {
+  running:  { dot: "bg-green-500",  text: "text-green-400" },
+  creating: { dot: "bg-yellow-500", text: "text-yellow-400", pulse: true },
+  stopped:  { dot: "bg-zinc-500",   text: "text-zinc-400" },
+  error:    { dot: "bg-red-500",    text: "text-red-400" },
 };
 
 export default function ServerPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { t } = useI18n();
   const [server, setServer] = useState<GameServer | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState("");
@@ -57,6 +53,17 @@ export default function ServerPage() {
   const [paypalReady, setPaypalReady] = useState(false);
   const [paypalEnabled, setPaypalEnabled] = useState(false);
   const paypalRef = useRef<HTMLDivElement>(null);
+
+  const statusMeta = (s: string) => STATUS_META[s] ?? { dot: "bg-zinc-500", text: "text-zinc-400" };
+  const statusLabel = (s: string) => t.dash.status[s] ?? s;
+
+  const fmtBytes = (n: number) => {
+    const u = t.srv.bytes;
+    if (n < 1024) return n + " " + u.b;
+    if (n < 1048576) return (n / 1024).toFixed(0) + " " + u.kb;
+    if (n < 1073741824) return (n / 1048576).toFixed(1) + " " + u.mb;
+    return (n / 1073741824).toFixed(2) + " " + u.gb;
+  };
 
   // Joueurs + console
   const [players, setPlayers] = useState<{ online: number; max: number; players: string[] } | null>(null);
@@ -122,10 +129,10 @@ export default function ServerPage() {
         if (res.ok) {
           router.push(`/merci?plan=${selectedPlan}&server=${id}&txn=${data.orderID}`);
         } else {
-          alert("Erreur: " + (await res.text()));
+          alert(t.srv.errPrefix + (await res.text()));
         }
       },
-      onError: (err: any) => alert("Erreur PayPal: " + err),
+      onError: (err: any) => alert(t.srv.errPaypal + err),
     }).render(paypalRef.current);
   }, [paypalReady, selectedPlan, id]);
 
@@ -225,7 +232,7 @@ export default function ServerPage() {
       setEditContent(d.content ?? "");
       setEditTrunc(!!d.truncated);
     } else {
-      alert("Impossible d'ouvrir ce fichier (binaire ou trop volumineux). Utilise Télécharger.");
+      alert(t.srv.openFileErr);
     }
   }
 
@@ -239,14 +246,18 @@ export default function ServerPage() {
         body: JSON.stringify({ path: editPath, content: editContent }),
       });
       if (res.ok) setEditPath(null);
-      else alert("Échec de l'enregistrement.");
+      else alert(t.srv.saveFail);
     } finally {
       setSavingFile(false);
     }
   }
 
   async function deleteEntry(e: FileEntry) {
-    if (!confirm(`Supprimer ${e.is_dir ? "le dossier" : "le fichier"} « ${e.name} » ?${e.is_dir ? " (et tout son contenu)" : ""}`)) return;
+    const msg = t.srv.delAsk
+      .replace("{type}", e.is_dir ? t.srv.delFolder : t.srv.delFile)
+      .replace("{name}", e.name)
+      .replace("{contents}", e.is_dir ? t.srv.delContents : "");
+    if (!confirm(msg)) return;
     const res = await fetch(`${API}/api/v1/servers/${id}/files`, {
       method: "DELETE", credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -264,14 +275,14 @@ export default function ServerPage() {
         method: "POST", credentials: "include", body: fd,
       });
       if (res.ok) loadFiles(filesPath);
-      else alert("Échec de l'upload (taille max 512 Mo).");
+      else alert(t.srv.uploadFail);
     } finally {
       setUploading(false);
     }
   }
 
   async function mkdir() {
-    const name = prompt("Nom du nouveau dossier :");
+    const name = prompt(t.srv.mkdirPrompt);
     if (!name) return;
     const res = await fetch(`${API}/api/v1/servers/${id}/files/mkdir`, {
       method: "POST", credentials: "include",
@@ -324,13 +335,13 @@ export default function ServerPage() {
       body: JSON.stringify({ plan: selectedPlan }),
     });
     if (res.ok) { setSelectedPlan(""); fetchServer(); }
-    else alert("Erreur: " + (await res.text()));
+    else alert(t.srv.errPrefix + (await res.text()));
     setUpgrading(false);
   }
 
   async function changeVersion() {
     if (!selectedVersion) return;
-    if (!confirm(`Changer la version vers ${selectedVersion} ? Le serveur va redémarrer (le monde est conservé).`)) return;
+    if (!confirm(t.srv.confirmVersion.replace("{v}", selectedVersion))) return;
     setChangingVersion(true);
     const res = await fetch(`${API}/api/v1/servers/${id}/version`, {
       method: "POST",
@@ -339,17 +350,17 @@ export default function ServerPage() {
       body: JSON.stringify({ version: selectedVersion }),
     });
     if (res.ok) { setSelectedVersion(""); fetchServer(); }
-    else alert("Erreur: " + (await res.text()));
+    else alert(t.srv.errPrefix + (await res.text()));
     setChangingVersion(false);
   }
 
   async function deleteServer() {
-    if (!confirm("Supprimer ce serveur ? Les données du monde seront conservées.")) return;
+    if (!confirm(t.srv.confirmDelete)) return;
     await fetch(`${API}/api/v1/servers/${id}`, { method: "DELETE", credentials: "include" });
     router.push("/dashboard");
   }
 
-  if (loading) return <div className="p-8 text-zinc-400">Chargement...</div>;
+  if (loading) return <div className="p-8 text-zinc-400">{t.dash.loading}</div>;
   if (!server) return null;
 
   return (
@@ -361,44 +372,51 @@ export default function ServerPage() {
         </Link>
         <Server className="w-5 h-5 text-green-400" />
         <span className="font-bold">{server.name}</span>
-        <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-zinc-800 ml-2 ${statusOf(server.status).text}`}>
-          <span className={`w-2 h-2 rounded-full ${statusOf(server.status).dot} ${statusOf(server.status).pulse ? "animate-pulse" : ""}`} />
-          {statusOf(server.status).label}
+        <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-zinc-800 ml-2 ${statusMeta(server.status).text}`}>
+          <span className={`w-2 h-2 rounded-full ${statusMeta(server.status).dot} ${statusMeta(server.status).pulse ? "animate-pulse" : ""}`} />
+          {statusLabel(server.status)}
         </span>
         {running && players && (
           <span className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-zinc-800 text-zinc-300">
             <Users className="w-3.5 h-3.5 text-green-400" />
-            {players.online} / {players.max} joueurs
+            {players.online} / {players.max} {t.pricing.players}
           </span>
         )}
+        <div className="ml-auto">
+          <LanguageSwitcher />
+        </div>
       </nav>
 
       <div className="flex-1 p-6 max-w-4xl mx-auto w-full flex flex-col gap-6">
         {/* Infos + actions */}
         <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6 flex flex-col sm:flex-row gap-6 justify-between">
           <div className="flex flex-col gap-2 text-sm">
-            <div className="text-zinc-400">Adresse de connexion</div>
-            <code className="font-mono text-green-400">{server.subdomain}.servers.vbt-prog.com:{server.port}</code>
+            <div className="text-zinc-400">{t.srv.connAddress}</div>
+            <code className="font-mono text-green-400">
+              {server.game === "minecraft"
+                ? `${server.subdomain}.servers.vbt-prog.com:${server.port}`
+                : `${process.env.NEXT_PUBLIC_SERVER_HOST ?? "24.157.140.226"}:${server.port}`}
+            </code>
             <div className="text-zinc-500 mt-2">
-              Plan <span className="text-zinc-300 capitalize">{server.plan}</span>
+              {t.dash.plan} <span className="text-zinc-300 capitalize">{server.plan}</span>
               {" · "}{server.ram_mb / 1024} GB RAM
               {" · "}{server.cpu_cores} CPU
-              {" · "}version <span className="text-zinc-300">{server.version === "LATEST" ? "dernière" : server.version}</span>
+              {" · "}{t.srv.version} <span className="text-zinc-300">{server.version === "LATEST" ? t.srv.versionLatestShort : server.version}</span>
             </div>
           </div>
           <div className="flex gap-2 items-start">
             {server.status === "stopped" && (
               <button onClick={() => action("start")} className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
-                <Play className="w-4 h-4" /> Démarrer
+                <Play className="w-4 h-4" /> {t.dash.start}
               </button>
             )}
             {server.status === "running" && (
               <>
                 <button onClick={() => action("restart")} className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium px-4 py-2 rounded-lg text-sm transition-colors">
-                  <RefreshCw className="w-4 h-4" /> Redémarrer
+                  <RefreshCw className="w-4 h-4" /> {t.dash.restart}
                 </button>
                 <button onClick={() => action("stop")} className="flex items-center gap-2 bg-zinc-800 hover:bg-red-900 text-red-400 font-medium px-4 py-2 rounded-lg text-sm transition-colors">
-                  <Square className="w-4 h-4" /> Arrêter
+                  <Square className="w-4 h-4" /> {t.dash.stop}
                 </button>
               </>
             )}
@@ -408,11 +426,11 @@ export default function ServerPage() {
         {/* Upgrade / changement de plan */}
         <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
           <div className="flex items-center gap-2 font-semibold mb-1">
-            <ArrowUpCircle className="w-5 h-5 text-green-400" /> Changer de plan
+            <ArrowUpCircle className="w-5 h-5 text-green-400" /> {t.srv.changePlan}
           </div>
           <p className="text-sm text-zinc-500 mb-4">
-            Plan actuel : <span className="text-zinc-300 capitalize">{server.plan}</span>.
-            Les plans payants nécessitent un abonnement.
+            {t.srv.currentPlan} <span className="text-zinc-300 capitalize">{server.plan}</span>.
+            {" "}{t.srv.paidNeedSub}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
             {PLANS.map((p) => {
@@ -429,19 +447,20 @@ export default function ServerPage() {
                     : "border-zinc-700 hover:border-zinc-500"
                   }`}
                 >
-                  <div className="font-semibold text-sm">{p.label}</div>
-                  <div className="text-zinc-400">{p.specs}</div>
+                  <div className="font-semibold text-sm">{t.planNames[p.id]}</div>
+                  <div className="text-zinc-400">{p.ram} · {p.cores} {p.cores > 1 ? t.srv.cores : t.srv.core}</div>
                   <div className="text-zinc-500 mt-1">{p.price}</div>
-                  {current && <div className="text-[10px] text-green-400 mt-1">actuel</div>}
-                  {p.id !== "free" && <div className="text-[10px] text-zinc-600 mt-1">abonnement</div>}
+                  {current && <div className="text-[10px] text-green-400 mt-1">{t.srv.current}</div>}
+                  {p.id !== "free" && <div className="text-[10px] text-zinc-600 mt-1">{t.srv.subscription}</div>}
                 </button>
               );
             })}
           </div>
           {selectedPlan && selectedPlan !== "free" && (
             <div className="mb-4 rounded-lg border border-indigo-900 bg-indigo-950/30 px-4 py-3 text-sm text-indigo-300">
-              Le plan <b>{PLANS.find(p => p.id === selectedPlan)?.label}</b> à {PLANS.find(p => p.id === selectedPlan)?.price} —
-              paie avec PayPal pour l'activer immédiatement.
+              {t.srv.planPayHint
+                .replace("{plan}", t.planNames[selectedPlan] ?? selectedPlan)
+                .replace("{price}", PLANS.find((p) => p.id === selectedPlan)?.price ?? "")}
             </div>
           )}
           {selectedPlan && selectedPlan !== "free" ? (
@@ -449,7 +468,7 @@ export default function ServerPage() {
               <div ref={paypalRef} className="max-w-xs" />
             ) : (
               <button disabled className="bg-indigo-600/40 text-indigo-200 text-sm font-medium px-5 py-2 rounded-lg cursor-not-allowed">
-                Paiement bientôt disponible
+                {t.srv.payComingSoon}
               </button>
             )
           ) : (
@@ -458,29 +477,30 @@ export default function ServerPage() {
               disabled={!selectedPlan || upgrading}
               className="bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-medium px-5 py-2 rounded-lg transition-colors"
             >
-              {upgrading ? "Application..." : selectedPlan ? "Repasser au plan Gratuit" : "Choisis un plan"}
+              {upgrading ? t.srv.applying : selectedPlan ? t.srv.backToFree : t.srv.choosePlan}
             </button>
           )}
         </div>
 
-        {/* Version Minecraft */}
+        {/* Version Minecraft (jeux MC uniquement) */}
+        {server.game === "minecraft" && (
         <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
           <div className="flex items-center gap-2 font-semibold mb-1">
-            <RefreshCw className="w-5 h-5 text-green-400" /> Version Minecraft
+            <RefreshCw className="w-5 h-5 text-green-400" /> {t.srv.mcVersion}
           </div>
           <p className="text-sm text-zinc-500 mb-4">
-            Version actuelle : <span className="text-zinc-300">{server.version === "LATEST" ? "dernière (LATEST)" : server.version}</span>.
-            Changer la version <span className="text-zinc-400">redémarre le serveur</span> — le monde et les configs sont conservés.
+            {t.srv.currentVersion} <span className="text-zinc-300">{server.version === "LATEST" ? t.srv.latestParens : server.version}</span>.
+            {" "}{t.srv.vChangePre}<span className="text-zinc-400">{t.srv.vChangeBold}</span>{t.srv.vChangePost}
           </p>
           <div className="flex items-center gap-2">
             <select
               value={selectedVersion}
               onChange={(e) => setSelectedVersion(e.target.value)}
-              className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+              className="select-dark cursor-pointer bg-zinc-950 border border-zinc-700 rounded-lg pl-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500"
             >
-              <option value="">Choisir une version…</option>
+              <option value="">{t.srv.chooseVersion}</option>
               {VERSIONS.filter((v) => v !== server.version).map((v) => (
-                <option key={v} value={v}>{v === "LATEST" ? "Dernière version" : v}</option>
+                <option key={v} value={v}>{v === "LATEST" ? t.dash.versionLatest : v}</option>
               ))}
             </select>
             <button
@@ -488,16 +508,17 @@ export default function ServerPage() {
               disabled={!selectedVersion || changingVersion}
               className="bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-medium px-5 py-2 rounded-lg transition-colors"
             >
-              {changingVersion ? "Application..." : "Appliquer"}
+              {changingVersion ? t.srv.applying : t.srv.apply}
             </button>
           </div>
         </div>
+        )}
 
         {/* Console */}
         <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 font-semibold">
-              <Terminal className="w-5 h-5 text-green-400" /> Console
+              <Terminal className="w-5 h-5 text-green-400" /> {t.srv.console}
             </div>
             {running && players && (
               <span className="flex items-center gap-1.5 text-xs text-zinc-400">
@@ -510,80 +531,84 @@ export default function ServerPage() {
           {running ? (
             <>
               <pre ref={logRef} className="h-72 overflow-auto bg-black/60 rounded-lg p-3 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
-                {logs || "Chargement des logs…"}
+                {logs || t.srv.logsLoading}
               </pre>
+              {/* Saisie de commande : RCON, Minecraft uniquement */}
+              {server.game === "minecraft" && (
               <form onSubmit={sendCommand} className="mt-3 flex gap-2">
                 <span className="flex items-center text-zinc-500 font-mono text-sm">/</span>
                 <input
                   value={command}
                   onChange={(e) => setCommand(e.target.value)}
-                  placeholder="commande (ex: say bonjour, time set day, op Pseudo)"
+                  placeholder={t.srv.cmdPlaceholder}
                   className="flex-1 bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:outline-none focus:border-green-500"
                 />
                 <button type="submit" disabled={sending || !command.trim()}
                   className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
-                  <SendHorizontal className="w-4 h-4" /> Envoyer
+                  <SendHorizontal className="w-4 h-4" /> {t.srv.send}
                 </button>
               </form>
+              )}
             </>
           ) : (
-            <p className="text-sm text-zinc-500">Démarre le serveur pour accéder à la console et voir les joueurs connectés.</p>
+            <p className="text-sm text-zinc-500">{t.srv.consoleOffline}</p>
           )}
         </div>
 
-        {/* Gestion des joueurs */}
+        {/* Gestion des joueurs : RCON, Minecraft uniquement */}
+        {server.game === "minecraft" && (
         <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
           <div className="flex items-center gap-2 font-semibold mb-4">
-            <Shield className="w-5 h-5 text-green-400" /> Joueurs
+            <Shield className="w-5 h-5 text-green-400" /> {t.srv.playersTitle}
           </div>
           {running ? (
             <div className="flex flex-col gap-5">
               {/* Connectés */}
               <div>
-                <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Connectés ({players?.online ?? 0})</div>
+                <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">{t.srv.connected} ({players?.online ?? 0})</div>
                 {players && players.players.length > 0 ? (
                   <div className="flex flex-col gap-2">
                     {players.players.map((p) => (
                       <div key={p} className="flex items-center justify-between gap-2 rounded-lg bg-black/30 px-3 py-2">
                         <span className="font-medium text-sm truncate">{p}</span>
                         <div className="flex gap-1.5 shrink-0">
-                          <button onClick={() => doPlayerAction("op", p)} disabled={actBusy} title="Donner OP"
+                          <button onClick={() => doPlayerAction("op", p)} disabled={actBusy} title={t.srv.giveOp}
                             className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-green-900/60 text-green-400 disabled:opacity-40 transition-colors"><Shield className="w-3.5 h-3.5" />OP</button>
-                          <button onClick={() => doPlayerAction("kick", p)} disabled={actBusy} title="Expulser"
+                          <button onClick={() => doPlayerAction("kick", p)} disabled={actBusy} title={t.srv.kick}
                             className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-yellow-900/60 text-yellow-400 disabled:opacity-40 transition-colors"><UserMinus className="w-3.5 h-3.5" />Kick</button>
-                          <button onClick={() => doPlayerAction("ban", p)} disabled={actBusy} title="Bannir"
+                          <button onClick={() => doPlayerAction("ban", p)} disabled={actBusy} title={t.srv.ban}
                             className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-red-900/60 text-red-400 disabled:opacity-40 transition-colors"><Ban className="w-3.5 h-3.5" />Ban</button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-zinc-600">Aucun joueur connecté.</p>
+                  <p className="text-sm text-zinc-600">{t.srv.noPlayersOnline}</p>
                 )}
               </div>
 
               {/* Action par pseudo */}
               <div>
-                <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Ajouter / gérer par pseudo</div>
+                <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">{t.srv.addManageByName}</div>
                 <form onSubmit={(e) => { e.preventDefault(); doPlayerAction(playerAct, newPlayer); }} className="flex flex-wrap gap-2">
                   <input
                     value={newPlayer}
                     onChange={(e) => setNewPlayer(e.target.value)}
-                    placeholder="Pseudo Minecraft"
+                    placeholder={t.srv.mcUsername}
                     className="flex-1 min-w-[140px] bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500"
                   />
                   <select value={playerAct} onChange={(e) => setPlayerAct(e.target.value)}
-                    className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500">
+                    className="select-dark cursor-pointer bg-zinc-950 border border-zinc-700 rounded-lg pl-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500">
                     <option value="whitelist_add">Whitelist +</option>
                     <option value="whitelist_remove">Whitelist −</option>
-                    <option value="op">Donner OP</option>
-                    <option value="deop">Retirer OP</option>
-                    <option value="ban">Bannir</option>
-                    <option value="pardon">Débannir</option>
+                    <option value="op">{t.srv.giveOp}</option>
+                    <option value="deop">{t.srv.deop}</option>
+                    <option value="ban">{t.srv.ban}</option>
+                    <option value="pardon">{t.srv.pardon}</option>
                   </select>
                   <button type="submit" disabled={actBusy || !newPlayer.trim()}
                     className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
-                    <UserPlus className="w-4 h-4" /> Appliquer
+                    <UserPlus className="w-4 h-4" /> {t.srv.apply}
                   </button>
                 </form>
               </div>
@@ -591,49 +616,50 @@ export default function ServerPage() {
               {/* Listes */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Whitelist ({lists.whitelist.length})</div>
+                  <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">{t.srv.whitelist} ({lists.whitelist.length})</div>
                   {lists.whitelist.length ? (
                     <div className="flex flex-wrap gap-1.5">
                       {lists.whitelist.map((p) => (
-                        <button key={p} onClick={() => doPlayerAction("whitelist_remove", p)} title="Retirer de la whitelist"
+                        <button key={p} onClick={() => doPlayerAction("whitelist_remove", p)} title={t.srv.removeFromWhitelist}
                           className="group flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-green-500/10 text-green-300 hover:bg-red-900/50 hover:text-red-300 transition-colors">
                           {p} <span className="opacity-50 group-hover:opacity-100">×</span>
                         </button>
                       ))}
                     </div>
-                  ) : <p className="text-sm text-zinc-600">Vide.</p>}
+                  ) : <p className="text-sm text-zinc-600">{t.srv.empty}</p>}
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Bannis ({lists.banned.length})</div>
+                  <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">{t.srv.banned} ({lists.banned.length})</div>
                   {lists.banned.length ? (
                     <div className="flex flex-wrap gap-1.5">
                       {lists.banned.map((p) => (
-                        <button key={p} onClick={() => doPlayerAction("pardon", p)} title="Débannir"
+                        <button key={p} onClick={() => doPlayerAction("pardon", p)} title={t.srv.pardon}
                           className="group flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-red-500/10 text-red-300 hover:bg-green-900/50 hover:text-green-300 transition-colors">
                           {p} <span className="opacity-50 group-hover:opacity-100">×</span>
                         </button>
                       ))}
                     </div>
-                  ) : <p className="text-sm text-zinc-600">Aucun.</p>}
+                  ) : <p className="text-sm text-zinc-600">{t.srv.none}</p>}
                 </div>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">Démarre le serveur pour gérer les joueurs (OP, kick, ban, whitelist).</p>
+            <p className="text-sm text-zinc-500">{t.srv.playersOffline}</p>
           )}
         </div>
+        )}
 
         {/* Fichiers */}
         <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2 font-semibold">
-              <Folder className="w-5 h-5 text-green-400" /> Fichiers
+              <Folder className="w-5 h-5 text-green-400" /> {t.srv.files}
             </div>
             {running && (
               <div className="flex items-center gap-2">
-                <button onClick={mkdir} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"><FolderPlus className="w-4 h-4" /> Dossier</button>
+                <button onClick={mkdir} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"><FolderPlus className="w-4 h-4" /> {t.srv.folder}</button>
                 <label className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-green-500 hover:bg-green-400 text-black font-medium cursor-pointer transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
-                  <Upload className="w-4 h-4" /> {uploading ? "Envoi…" : "Uploader"}
+                  <Upload className="w-4 h-4" /> {uploading ? t.srv.uploading : t.srv.upload}
                   <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.currentTarget.value = ""; }} />
                 </label>
               </div>
@@ -668,9 +694,9 @@ export default function ServerPage() {
                   </button>
                 )}
                 {filesBusy && entries.length === 0 ? (
-                  <div className="px-3 py-4 text-sm text-zinc-600">Chargement…</div>
+                  <div className="px-3 py-4 text-sm text-zinc-600">{t.srv.loadingShort}</div>
                 ) : entries.length === 0 ? (
-                  <div className="px-3 py-4 text-sm text-zinc-600">Dossier vide.</div>
+                  <div className="px-3 py-4 text-sm text-zinc-600">{t.srv.emptyFolder}</div>
                 ) : entries.map((e) => (
                   <div key={e.name} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800/40 transition-colors group">
                     <button onClick={() => e.is_dir ? setFilesPath(joinPath(filesPath, e.name)) : openFile(e.name)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
@@ -678,15 +704,15 @@ export default function ServerPage() {
                       <span className="truncate">{e.name}</span>
                     </button>
                     {!e.is_dir && <span className="text-xs text-zinc-600 shrink-0 hidden sm:block">{fmtBytes(e.size)}</span>}
-                    {!e.is_dir && <button onClick={() => downloadEntry(e.name)} title="Télécharger" className="p-1 rounded text-zinc-500 hover:text-green-400 shrink-0"><Download className="w-4 h-4" /></button>}
-                    <button onClick={() => deleteEntry(e)} title="Supprimer" className="p-1 rounded text-zinc-500 hover:text-red-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
+                    {!e.is_dir && <button onClick={() => downloadEntry(e.name)} title={t.srv.download} className="p-1 rounded text-zinc-500 hover:text-green-400 shrink-0"><Download className="w-4 h-4" /></button>}
+                    <button onClick={() => deleteEntry(e)} title={t.srv.delete} className="p-1 rounded text-zinc-500 hover:text-red-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-zinc-600 mt-2">Astuce : pour un monde, uploade le dossier compressé puis dézippe-le, ou remplace le dossier <code className="text-zinc-400">world</code>. Upload max 512 Mo.</p>
+              <p className="text-xs text-zinc-600 mt-2">{t.srv.filesHintPre}<code className="text-zinc-400">world</code>{t.srv.filesHintPost}</p>
             </>
           ) : (
-            <p className="text-sm text-zinc-500">Démarre le serveur pour gérer les fichiers (configs, monde, plugins).</p>
+            <p className="text-sm text-zinc-500">{t.srv.filesOffline}</p>
           )}
         </div>
 
@@ -698,7 +724,7 @@ export default function ServerPage() {
                 <div className="flex items-center gap-2 font-mono text-sm truncate"><FileText className="w-4 h-4 text-green-400 shrink-0" />{editPath}</div>
                 <button onClick={() => setEditPath(null)} className="text-zinc-400 hover:text-zinc-100"><X className="w-5 h-5" /></button>
               </div>
-              {editTrunc && <div className="px-4 py-2 text-xs text-yellow-400 bg-yellow-500/10">Fichier tronqué à 1 Mo — l'enregistrement écraserait le reste. Télécharge-le plutôt pour l'éditer en entier.</div>}
+              {editTrunc && <div className="px-4 py-2 text-xs text-yellow-400 bg-yellow-500/10">{t.srv.truncated}</div>}
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
@@ -706,9 +732,9 @@ export default function ServerPage() {
                 className="flex-1 min-h-[50vh] bg-black/60 text-zinc-200 font-mono text-xs p-4 resize-none focus:outline-none"
               />
               <div className="flex justify-end gap-2 px-4 py-3 border-t border-zinc-800">
-                <button onClick={() => setEditPath(null)} className="px-4 py-2 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-200">Annuler</button>
+                <button onClick={() => setEditPath(null)} className="px-4 py-2 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-200">{t.srv.cancel}</button>
                 <button onClick={saveFile} disabled={savingFile || editTrunc} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black font-medium">
-                  <Save className="w-4 h-4" /> {savingFile ? "Enregistrement…" : "Enregistrer"}
+                  <Save className="w-4 h-4" /> {savingFile ? t.srv.saving : t.srv.save}
                 </button>
               </div>
             </div>
@@ -716,21 +742,17 @@ export default function ServerPage() {
         )}
 
         {/* Sections à venir */}
-        {[
-          { title: "Mods & Plugins", desc: "Gestion des mods — bientôt disponible" },
-        ].map(({ title, desc }) => (
-          <div key={title} className="border border-dashed border-zinc-800 rounded-xl p-6">
-            <div className="font-semibold mb-1">{title}</div>
-            <div className="text-sm text-zinc-500">{desc}</div>
-          </div>
-        ))}
+        <div className="border border-dashed border-zinc-800 rounded-xl p-6">
+          <div className="font-semibold mb-1">{t.srv.modsTitle}</div>
+          <div className="text-sm text-zinc-500">{t.srv.modsDesc}</div>
+        </div>
 
         {/* Danger zone */}
         <div className="border border-red-900 rounded-xl p-6 mt-4">
-          <div className="font-semibold text-red-400 mb-2">Zone de danger</div>
-          <p className="text-sm text-zinc-400 mb-4">Supprimer le serveur arrête le container Docker. Les données du monde sont conservées.</p>
+          <div className="font-semibold text-red-400 mb-2">{t.srv.dangerZone}</div>
+          <p className="text-sm text-zinc-400 mb-4">{t.srv.deleteDesc}</p>
           <button onClick={deleteServer} className="bg-red-900 hover:bg-red-800 text-red-300 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-            Supprimer ce serveur
+            {t.srv.deleteBtn}
           </button>
         </div>
       </div>
