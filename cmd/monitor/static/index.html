@@ -66,7 +66,7 @@
           <span id="ct-count" class="text-2xl font-bold">—</span>
           <span class="text-sm text-zinc-400">actifs / total</span>
         </div>
-        <div class="text-xs text-zinc-600 mt-3">Playrena + infrastructure</div>
+        <div class="text-xs text-zinc-600 mt-3">Playrena + infrastructure · <span id="players-total" class="text-emerald-300">0 joueur·s en ligne</span></div>
       </div>
     </section>
 
@@ -134,6 +134,7 @@
               <span class="font-semibold truncate">${c.name}</span>
               <span class="text-[10px] font-semibold text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded shrink-0">${c.node}</span>
               ${c.managed ? '<span class="text-[10px] font-semibold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded shrink-0">Playrena</span>' : ''}
+              ${c.has_players ? '<span class="text-[10px] font-semibold text-emerald-300 bg-emerald-500/10 px-1.5 py-0.5 rounded shrink-0">👤 '+c.players_online+'/'+c.players_max+'</span>' : ''}
             </div>
             <span class="text-xs text-zinc-500 shrink-0">${fmtUptime(c.uptime_secs)}</span>
           </div>
@@ -251,6 +252,9 @@
         document.getElementById('net-total').textContent = `↓${h.net_rx_total_gb.toFixed(1)} ↑${h.net_tx_total_gb.toFixed(1)} GB`;
 
         document.getElementById('ct-count').textContent = h.container_up + ' / ' + h.container_total;
+
+        const totPlayers = (d.containers||[]).reduce((a,c)=>a+(c.has_players?c.players_online:0),0);
+        document.getElementById('players-total').textContent = totPlayers + (totPlayers===1?' joueur en ligne':' joueurs en ligne');
 
         lastSnap = d;
         renderNodes();

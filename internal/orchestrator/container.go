@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 )
 
@@ -144,6 +146,54 @@ func (n *Node) GetContainerStatus(ctx context.Context, containerID string) (stri
 		return "", err
 	}
 	return info.State.Status, nil
+}
+
+// Exec lance une commande dans le container et retourne sa sortie combinée
+// (stdout+stderr). Utilisé pour rcon-cli (liste des joueurs, console).
+func (n *Node) Exec(ctx context.Context, containerID string, cmd []string) (string, error) {
+	execID, err := n.cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("exec create: %w", err)
+	}
+	att, err := n.cli.ContainerExecAttach(ctx, execID.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return "", fmt.Errorf("exec attach: %w", err)
+	}
+	defer att.Close()
+
+	var outBuf, errBuf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&outBuf, &errBuf, att.Reader); err != nil {
+		return "", fmt.Errorf("exec read: %w", err)
+	}
+	out := outBuf.String()
+	if out == "" {
+		out = errBuf.String()
+	}
+	return out, nil
+}
+
+// Logs retourne les dernières lignes de logs du container (console lecture seule).
+func (n *Node) Logs(ctx context.Context, containerID string, tail int) (string, error) {
+	rc, err := n.cli.ContainerLogs(ctx, containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       strconv.Itoa(tail),
+	})
+	if err != nil {
+		return "", err
+	}
+	defer rc.Close()
+	var outBuf, errBuf bytes.Buffer
+	// Les logs MC peuvent être multiplexés (pas de TTY) ; on démultiplexe.
+	if _, err := stdcopy.StdCopy(&outBuf, &errBuf, rc); err != nil {
+		// Fallback : flux brut (container avec TTY).
+		return outBuf.String() + errBuf.String(), nil
+	}
+	return outBuf.String() + errBuf.String(), nil
 }
 
 func (n *Node) pullImage(ctx context.Context, img string) error {

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle } from "lucide-react";
+import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal } from "lucide-react";
 
 const VERSIONS = ["LATEST", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.18.2", "1.16.5", "1.12.2", "1.8.9"];
 
@@ -50,6 +50,13 @@ export default function ServerPage() {
   const [paypalReady, setPaypalReady] = useState(false);
   const [paypalEnabled, setPaypalEnabled] = useState(false);
   const paypalRef = useRef<HTMLDivElement>(null);
+
+  // Joueurs + console
+  const [players, setPlayers] = useState<{ online: number; max: number; players: string[] } | null>(null);
+  const [logs, setLogs] = useState("");
+  const [command, setCommand] = useState("");
+  const [sending, setSending] = useState(false);
+  const logRef = useRef<HTMLPreElement>(null);
 
   // Charge la config billing + le SDK PayPal
   useEffect(() => {
@@ -112,6 +119,52 @@ export default function ServerPage() {
     setLoading(false);
   }
 
+  // Joueurs + console : poll quand le serveur tourne
+  const running = server?.status === "running";
+  useEffect(() => {
+    if (!running) { setPlayers(null); return; }
+    const tick = async () => {
+      try {
+        const [p, l] = await Promise.all([
+          fetch(`${API}/api/v1/servers/${id}/players`, { credentials: "include" }),
+          fetch(`${API}/api/v1/servers/${id}/logs?tail=200`, { credentials: "include" }),
+        ]);
+        if (p.ok) setPlayers(await p.json());
+        if (l.ok) {
+          const stick = logRef.current && logRef.current.scrollTop + logRef.current.clientHeight >= logRef.current.scrollHeight - 40;
+          setLogs((await l.json()).logs ?? "");
+          if (stick) requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; });
+        }
+      } catch { /* serveur pas prêt */ }
+    };
+    tick();
+    const t = setInterval(tick, 5000);
+    return () => clearInterval(t);
+  }, [id, running]);
+
+  async function sendCommand(e: React.FormEvent) {
+    e.preventDefault();
+    const cmd = command.trim();
+    if (!cmd || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/command`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: cmd }),
+      });
+      if (res.ok) {
+        const out = (await res.json()).output ?? "";
+        setLogs((prev) => prev + `\n> ${cmd}\n${out}`.trimEnd() + "\n");
+        requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; });
+      }
+      setCommand("");
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function action(a: "start" | "stop" | "restart") {
     await fetch(`${API}/api/v1/servers/${id}/${a}`, { method: "POST", credentials: "include" });
     fetchServer();
@@ -168,6 +221,12 @@ export default function ServerPage() {
           <span className={`w-2 h-2 rounded-full ${statusOf(server.status).dot} ${statusOf(server.status).pulse ? "animate-pulse" : ""}`} />
           {statusOf(server.status).label}
         </span>
+        {running && players && (
+          <span className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-zinc-800 text-zinc-300">
+            <Users className="w-3.5 h-3.5 text-green-400" />
+            {players.online} / {players.max} joueurs
+          </span>
+        )}
       </nav>
 
       <div className="flex-1 p-6 max-w-4xl mx-auto w-full flex flex-col gap-6">
@@ -200,6 +259,44 @@ export default function ServerPage() {
               </>
             )}
           </div>
+        </div>
+
+        {/* Console */}
+        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 font-semibold">
+              <Terminal className="w-5 h-5 text-green-400" /> Console
+            </div>
+            {running && players && (
+              <span className="flex items-center gap-1.5 text-xs text-zinc-400">
+                <Users className="w-3.5 h-3.5" />
+                {players.online}/{players.max}
+                {players.players.length > 0 && <span className="text-zinc-500">· {players.players.join(", ")}</span>}
+              </span>
+            )}
+          </div>
+          {running ? (
+            <>
+              <pre ref={logRef} className="h-72 overflow-auto bg-black/60 rounded-lg p-3 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
+                {logs || "Chargement des logs…"}
+              </pre>
+              <form onSubmit={sendCommand} className="mt-3 flex gap-2">
+                <span className="flex items-center text-zinc-500 font-mono text-sm">/</span>
+                <input
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
+                  placeholder="commande (ex: say bonjour, time set day, op Pseudo)"
+                  className="flex-1 bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:outline-none focus:border-green-500"
+                />
+                <button type="submit" disabled={sending || !command.trim()}
+                  className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+                  <SendHorizontal className="w-4 h-4" /> Envoyer
+                </button>
+              </form>
+            </>
+          ) : (
+            <p className="text-sm text-zinc-500">Démarre le serveur pour accéder à la console et voir les joueurs connectés.</p>
+          )}
         </div>
 
         {/* Upgrade / changement de plan */}

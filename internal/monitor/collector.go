@@ -2,11 +2,13 @@ package monitor
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -18,8 +20,12 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"golang.org/x/sys/unix"
 )
+
+// rconListRe : parse "There are 2 of a max of 5 players online: ..."
+var rconListRe = regexp.MustCompile(`There are (\d+) of a max of (\d+) players online`)
 
 // newDockerClient crée un client Docker local (unix/tcp) ou distant (ssh://).
 func newDockerClient(host string) (*client.Client, error) {
@@ -54,6 +60,9 @@ type ContainerMetric struct {
 	MemLimitMB float64 `json:"mem_limit_mb"`
 	MemPercent float64 `json:"mem_percent"`
 	CPULimit   float64 `json:"cpu_limit"` // cœurs alloués (0 = illimité)
+	HasPlayers bool    `json:"has_players"`    // infos joueurs dispo (serveur MC géré)
+	PlayersOn  int     `json:"players_online"` // joueurs connectés
+	PlayersMax int     `json:"players_max"`    // slots max
 	DiskRwMB   float64 `json:"disk_rw_mb"`
 	NetRxMB    float64 `json:"net_rx_mb"`
 	NetTxMB    float64 `json:"net_tx_mb"`
@@ -304,7 +313,46 @@ func (c *Collector) containerMetric(ctx context.Context, cli *client.Client, nod
 	rx, tx := s.netBytes()
 	m.NetRxMB = float64(rx) / 1024 / 1024
 	m.NetTxMB = float64(tx) / 1024 / 1024
+
+	// Joueurs connectés (serveurs MC gérés) via rcon-cli.
+	if managed {
+		if on, max, ok := rconPlayers(ctx, cli, ct.ID); ok {
+			m.HasPlayers = true
+			m.PlayersOn = on
+			m.PlayersMax = max
+		}
+	}
 	return m
+}
+
+// rconPlayers exécute `rcon-cli list` dans le container et parse le décompte.
+func rconPlayers(ctx context.Context, cli *client.Client, id string) (online, max int, ok bool) {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	ex, err := cli.ContainerExecCreate(ctx, id, container.ExecOptions{
+		Cmd:          []string{"rcon-cli", "list"},
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return 0, 0, false
+	}
+	att, err := cli.ContainerExecAttach(ctx, ex.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return 0, 0, false
+	}
+	defer att.Close()
+	var out, errBuf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&out, &errBuf, att.Reader); err != nil {
+		return 0, 0, false
+	}
+	m := rconListRe.FindStringSubmatch(out.String())
+	if m == nil {
+		return 0, 0, false
+	}
+	online, _ = strconv.Atoi(m[1])
+	max, _ = strconv.Atoi(m[2])
+	return online, max, true
 }
 
 func (c *Collector) hostMetric(ctx context.Context) HostMetric {
