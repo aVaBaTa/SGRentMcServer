@@ -52,11 +52,13 @@ func main() {
 	}()
 
 	httpServer := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      srv,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:    ":" + cfg.Port,
+		Handler: srv,
+		// Pas de ReadTimeout/WriteTimeout global : les uploads (mondes) et
+		// downloads de fichiers peuvent être longs. On se protège du slowloris
+		// via ReadHeaderTimeout ; les corps sont bornés par MaxBytesReader.
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {

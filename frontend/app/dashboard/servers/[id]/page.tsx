@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus } from "lucide-react";
+import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight } from "lucide-react";
 
 const VERSIONS = ["LATEST", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.18.2", "1.16.5", "1.12.2", "1.8.9"];
 
@@ -38,6 +38,13 @@ const STATUS: Record<string, { label: string; dot: string; text: string; pulse?:
 };
 const statusOf = (s: string) => STATUS[s] ?? { label: s, dot: "bg-zinc-500", text: "text-zinc-400" };
 
+const fmtBytes = (n: number) => {
+  if (n < 1024) return n + " o";
+  if (n < 1048576) return (n / 1024).toFixed(0) + " Ko";
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + " Mo";
+  return (n / 1073741824).toFixed(2) + " Go";
+};
+
 export default function ServerPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -63,6 +70,17 @@ export default function ServerPage() {
   const [newPlayer, setNewPlayer] = useState("");
   const [playerAct, setPlayerAct] = useState("whitelist_add");
   const [actBusy, setActBusy] = useState(false);
+
+  // Fichiers
+  interface FileEntry { name: string; is_dir: boolean; size: number; mtime: number; }
+  const [filesPath, setFilesPath] = useState("/");
+  const [entries, setEntries] = useState<FileEntry[]>([]);
+  const [filesBusy, setFilesBusy] = useState(false);
+  const [editPath, setEditPath] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editTrunc, setEditTrunc] = useState(false);
+  const [savingFile, setSavingFile] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   // Charge la config billing + le SDK PayPal
   useEffect(() => {
@@ -172,6 +190,100 @@ export default function ServerPage() {
     } finally {
       setActBusy(false);
     }
+  }
+
+  // ---- Fichiers ----
+  const joinPath = (dir: string, name: string) => (dir === "/" ? "/" + name : dir + "/" + name);
+
+  useEffect(() => {
+    if (!running) { setEntries([]); return; }
+    loadFiles(filesPath);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, running, filesPath]);
+
+  async function loadFiles(p: string) {
+    setFilesBusy(true);
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/files?path=${encodeURIComponent(p)}`, { credentials: "include" });
+      if (res.ok) {
+        const d = await res.json();
+        const list: FileEntry[] = d.entries ?? [];
+        list.sort((a, b) => (a.is_dir !== b.is_dir ? (a.is_dir ? -1 : 1) : a.name.localeCompare(b.name)));
+        setEntries(list);
+      }
+    } finally {
+      setFilesBusy(false);
+    }
+  }
+
+  async function openFile(name: string) {
+    const p = joinPath(filesPath, name);
+    const res = await fetch(`${API}/api/v1/servers/${id}/files/content?path=${encodeURIComponent(p)}`, { credentials: "include" });
+    if (res.ok) {
+      const d = await res.json();
+      setEditPath(p);
+      setEditContent(d.content ?? "");
+      setEditTrunc(!!d.truncated);
+    } else {
+      alert("Impossible d'ouvrir ce fichier (binaire ou trop volumineux). Utilise Télécharger.");
+    }
+  }
+
+  async function saveFile() {
+    if (!editPath) return;
+    setSavingFile(true);
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/files/content`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: editPath, content: editContent }),
+      });
+      if (res.ok) setEditPath(null);
+      else alert("Échec de l'enregistrement.");
+    } finally {
+      setSavingFile(false);
+    }
+  }
+
+  async function deleteEntry(e: FileEntry) {
+    if (!confirm(`Supprimer ${e.is_dir ? "le dossier" : "le fichier"} « ${e.name} » ?${e.is_dir ? " (et tout son contenu)" : ""}`)) return;
+    const res = await fetch(`${API}/api/v1/servers/${id}/files`, {
+      method: "DELETE", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: joinPath(filesPath, e.name) }),
+    });
+    if (res.ok) loadFiles(filesPath);
+  }
+
+  async function uploadFile(f: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await fetch(`${API}/api/v1/servers/${id}/files/upload?path=${encodeURIComponent(filesPath)}`, {
+        method: "POST", credentials: "include", body: fd,
+      });
+      if (res.ok) loadFiles(filesPath);
+      else alert("Échec de l'upload (taille max 512 Mo).");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function mkdir() {
+    const name = prompt("Nom du nouveau dossier :");
+    if (!name) return;
+    const res = await fetch(`${API}/api/v1/servers/${id}/files/mkdir`, {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: joinPath(filesPath, name) }),
+    });
+    if (res.ok) loadFiles(filesPath);
+  }
+
+  function downloadEntry(name: string) {
+    const p = joinPath(filesPath, name);
+    window.open(`${API}/api/v1/servers/${id}/files/download?path=${encodeURIComponent(p)}`, "_blank");
   }
 
   async function sendCommand(e: React.FormEvent) {
@@ -511,10 +623,101 @@ export default function ServerPage() {
           )}
         </div>
 
+        {/* Fichiers */}
+        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2 font-semibold">
+              <Folder className="w-5 h-5 text-green-400" /> Fichiers
+            </div>
+            {running && (
+              <div className="flex items-center gap-2">
+                <button onClick={mkdir} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"><FolderPlus className="w-4 h-4" /> Dossier</button>
+                <label className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-green-500 hover:bg-green-400 text-black font-medium cursor-pointer transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
+                  <Upload className="w-4 h-4" /> {uploading ? "Envoi…" : "Uploader"}
+                  <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.currentTarget.value = ""; }} />
+                </label>
+              </div>
+            )}
+          </div>
+
+          {running ? (
+            <>
+              {/* Fil d'Ariane */}
+              <div className="flex items-center flex-wrap gap-1 text-sm mb-3">
+                {(() => {
+                  const parts = filesPath.split("/").filter(Boolean);
+                  return (
+                    <>
+                      <button onClick={() => setFilesPath("/")} className="text-green-400 hover:underline">/data</button>
+                      {parts.map((seg, i) => (
+                        <span key={i} className="flex items-center gap-1">
+                          <ChevronRight className="w-3.5 h-3.5 text-zinc-600" />
+                          <button onClick={() => setFilesPath("/" + parts.slice(0, i + 1).join("/"))} className="text-zinc-300 hover:underline">{seg}</button>
+                        </span>
+                      ))}
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Liste */}
+              <div className="rounded-lg border border-zinc-800 divide-y divide-zinc-800 overflow-hidden">
+                {filesPath !== "/" && (
+                  <button onClick={() => setFilesPath(filesPath.split("/").slice(0, -1).join("/") || "/")} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800/50 transition-colors">
+                    <Folder className="w-4 h-4" /> ..
+                  </button>
+                )}
+                {filesBusy && entries.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-zinc-600">Chargement…</div>
+                ) : entries.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-zinc-600">Dossier vide.</div>
+                ) : entries.map((e) => (
+                  <div key={e.name} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800/40 transition-colors group">
+                    <button onClick={() => e.is_dir ? setFilesPath(joinPath(filesPath, e.name)) : openFile(e.name)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      {e.is_dir ? <Folder className="w-4 h-4 text-blue-400 shrink-0" /> : <FileText className="w-4 h-4 text-zinc-500 shrink-0" />}
+                      <span className="truncate">{e.name}</span>
+                    </button>
+                    {!e.is_dir && <span className="text-xs text-zinc-600 shrink-0 hidden sm:block">{fmtBytes(e.size)}</span>}
+                    {!e.is_dir && <button onClick={() => downloadEntry(e.name)} title="Télécharger" className="p-1 rounded text-zinc-500 hover:text-green-400 shrink-0"><Download className="w-4 h-4" /></button>}
+                    <button onClick={() => deleteEntry(e)} title="Supprimer" className="p-1 rounded text-zinc-500 hover:text-red-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-zinc-600 mt-2">Astuce : pour un monde, uploade le dossier compressé puis dézippe-le, ou remplace le dossier <code className="text-zinc-400">world</code>. Upload max 512 Mo.</p>
+            </>
+          ) : (
+            <p className="text-sm text-zinc-500">Démarre le serveur pour gérer les fichiers (configs, monde, plugins).</p>
+          )}
+        </div>
+
+        {/* Éditeur de fichier (overlay) */}
+        {editPath && (
+          <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setEditPath(null)}>
+            <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+                <div className="flex items-center gap-2 font-mono text-sm truncate"><FileText className="w-4 h-4 text-green-400 shrink-0" />{editPath}</div>
+                <button onClick={() => setEditPath(null)} className="text-zinc-400 hover:text-zinc-100"><X className="w-5 h-5" /></button>
+              </div>
+              {editTrunc && <div className="px-4 py-2 text-xs text-yellow-400 bg-yellow-500/10">Fichier tronqué à 1 Mo — l'enregistrement écraserait le reste. Télécharge-le plutôt pour l'éditer en entier.</div>}
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                spellCheck={false}
+                className="flex-1 min-h-[50vh] bg-black/60 text-zinc-200 font-mono text-xs p-4 resize-none focus:outline-none"
+              />
+              <div className="flex justify-end gap-2 px-4 py-3 border-t border-zinc-800">
+                <button onClick={() => setEditPath(null)} className="px-4 py-2 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-200">Annuler</button>
+                <button onClick={saveFile} disabled={savingFile || editTrunc} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black font-medium">
+                  <Save className="w-4 h-4" /> {savingFile ? "Enregistrement…" : "Enregistrer"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Sections à venir */}
         {[
           { title: "Mods & Plugins", desc: "Gestion des mods — bientôt disponible" },
-          { title: "Fichiers", desc: "Explorateur de fichiers — bientôt disponible" },
         ].map(({ title, desc }) => (
           <div key={title} className="border border-dashed border-zinc-800 rounded-xl p-6">
             <div className="font-semibold mb-1">{title}</div>
