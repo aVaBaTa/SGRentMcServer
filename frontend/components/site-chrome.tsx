@@ -127,7 +127,7 @@ export function SiteFooter() {
           ]} />
 
           <FootCol title={t.foot.support} links={[
-            { label: L.contact, href: "#" },
+            { label: L.contact, href: "/games/minecraft#support" },
             { label: L.kb, href: "#" },
             { label: L.aup, href: "#" },
             { label: L.tos, href: "#" },

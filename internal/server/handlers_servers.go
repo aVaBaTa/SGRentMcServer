@@ -162,10 +162,21 @@ func (s *Server) provisionServer(gs *servers.GameServer, game string, port int, 
 		return
 	}
 	s.serverRepo.UpdateContainerID(ctx, gs.ID, containerID)
+	gs.ContainerID = containerID
 
 	if err := node.StartServer(ctx, containerID); err != nil {
 		slog.Error("provision: start container failed", "id", gs.ID, "err", err)
 		s.serverRepo.UpdateStatus(ctx, gs.ID, "error")
+		return
+	}
+
+	// Jeux à authentification interactive (Hytale) : le serveur affiche un OAuth
+	// device-code au 1er démarrage. On délègue à un watcher détaché (contexte
+	// long) qui passe le statut à "auth_required" puis "running" une fois l'auth
+	// complétée. Les autres jeux passent directement à "running".
+	if gameDef.NeedsAuth {
+		go s.watchAuthAndRun(gs, node)
+		slog.Info("provision: awaiting interactive auth", "id", gs.ID, "port", port)
 		return
 	}
 

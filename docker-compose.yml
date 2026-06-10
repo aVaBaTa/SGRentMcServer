@@ -48,12 +48,20 @@ services:
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID}
       PAYPAL_SECRET: ${PAYPAL_SECRET}
       PAYPAL_ENV: ${PAYPAL_ENV:-sandbox}
+      # SMTP (SGMail) pour le formulaire de support
+      SMTP_HOST: mailserver
+      SMTP_PORT: "587"
+      SMTP_USER: contact@mcserver.vbt-prog.com
+      SMTP_PASS: ${SMTP_PASS}
+      SUPPORT_FROM: contact@mcserver.vbt-prog.com
+      SUPPORT_TO: contact@mcserver.vbt-prog.com
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./secrets/ssh:/etc/sgrent-ssh:ro
     networks:
       - sgrent
       - portfolio-net
+      - sgmail
 
 volumes:
   pgdata:
@@ -63,3 +71,6 @@ networks:
   portfolio-net:
     external: true
     name: sgportfolio_portfolio-net
+  sgmail:
+    external: true
+    name: sgmail_default

@@ -29,6 +29,30 @@ export default function MinecraftHosting() {
   const [period, setPeriod] = useState<Period>("monthly");
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
+  // Formulaire de support
+  const [sup, setSup] = useState({ name: "", email: "", subject: "", message: "" });
+  const [supStatus, setSupStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  async function submitSupport(e: React.FormEvent) {
+    e.preventDefault();
+    setSupStatus("sending");
+    try {
+      const res = await fetch(`${API}/api/v1/support`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sup),
+      });
+      if (res.ok) {
+        setSup({ name: "", email: "", subject: "", message: "" });
+        setSupStatus("sent");
+      } else {
+        setSupStatus("error");
+      }
+    } catch {
+      setSupStatus("error");
+    }
+  }
+
   const faqLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -230,6 +254,54 @@ export default function MinecraftHosting() {
             );
           })}
         </div>
+      </section>
+
+      {/* Support */}
+      <section id="support" className="px-6 pb-32 max-w-2xl mx-auto w-full">
+        <h2 className="text-3xl font-bold text-center mb-2">{t.support.heading}</h2>
+        <p className="text-zinc-500 text-center mb-8">{t.support.sub}</p>
+
+        {supStatus === "sent" ? (
+          <div className="border border-green-500/30 bg-green-950/20 rounded-xl p-8 text-center">
+            <p className="text-green-400 font-semibold text-lg mb-1">{t.support.sentTitle}</p>
+            <p className="text-zinc-400 text-sm mb-5">{t.support.sentDesc}</p>
+            <button onClick={() => setSupStatus("idle")} className="text-sm text-green-400 hover:underline">
+              {t.support.sendAnother}
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={submitSupport} className="flex flex-col gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <input
+                required value={sup.name} onChange={(e) => setSup({ ...sup, name: e.target.value })}
+                placeholder={t.support.name} maxLength={100}
+                className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-green-500"
+              />
+              <input
+                required type="email" value={sup.email} onChange={(e) => setSup({ ...sup, email: e.target.value })}
+                placeholder={t.support.email}
+                className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-green-500"
+              />
+            </div>
+            <input
+              value={sup.subject} onChange={(e) => setSup({ ...sup, subject: e.target.value })}
+              placeholder={t.support.subject} maxLength={150}
+              className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-green-500"
+            />
+            <textarea
+              required value={sup.message} onChange={(e) => setSup({ ...sup, message: e.target.value })}
+              placeholder={t.support.message} rows={5} maxLength={5000}
+              className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-green-500 resize-y"
+            />
+            {supStatus === "error" && <p className="text-sm text-red-400">{t.support.error}</p>}
+            <button
+              type="submit" disabled={supStatus === "sending"}
+              className="self-center flex items-center justify-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-8 py-3 rounded-xl transition-colors"
+            >
+              {supStatus === "sending" ? t.support.sending : t.support.send}
+            </button>
+          </form>
+        )}
       </section>
 
       <SiteFooter />

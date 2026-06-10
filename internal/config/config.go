@@ -42,6 +42,14 @@ type Config struct {
 	MCRouterAPI string            // ex: http://mc-router:26666
 	NodeAddrs   map[string]string // IP LAN par node pour le routing (node1=10.0.0.2,...)
 
+	// SMTP (SGMail) pour le formulaire de support
+	SMTPHost    string
+	SMTPPort    string
+	SMTPUser    string
+	SMTPPass    string
+	SupportFrom string
+	SupportTo   string
+
 	Env string
 }
 
@@ -75,7 +83,15 @@ func Load() *Config {
 		MCNetwork:     getEnv("MC_NETWORK", "mc-net"),
 		MCRouterAPI:   getEnv("MC_ROUTER_API", "http://mc-router:26666"),
 		NodeAddrs:     parseKV(getEnv("NODE_ADDRS", "node1=10.0.0.2,node2=10.0.0.110")),
-		Env:           getEnv("ENV", "development"),
+
+		SMTPHost:    getEnv("SMTP_HOST", "mailserver"),
+		SMTPPort:    getEnv("SMTP_PORT", "587"),
+		SMTPUser:    getEnv("SMTP_USER", "contact@mcserver.vbt-prog.com"),
+		SMTPPass:    getEnv("SMTP_PASS", ""),
+		SupportFrom: getEnv("SUPPORT_FROM", "contact@mcserver.vbt-prog.com"),
+		SupportTo:   getEnv("SUPPORT_TO", "contact@mcserver.vbt-prog.com"),
+
+		Env: getEnv("ENV", "development"),
 	}
 }
 

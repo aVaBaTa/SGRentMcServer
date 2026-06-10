@@ -71,38 +71,45 @@ func (s *Server) mountRoutes() {
 	})
 
 	s.router.Route("/api/v1", func(r chi.Router) {
-		r.Use(auth.Middleware(s.cfg.JWTSecret))
+		// --- Routes publiques (sans authentification) ---
+		r.Post("/support", s.handleSupport)
 
-		r.Route("/user", func(r chi.Router) {
-			r.Get("/me", s.handleGetMe)
-		})
+		// --- Routes authentifiées ---
+		r.Group(func(r chi.Router) {
+			r.Use(auth.Middleware(s.cfg.JWTSecret))
 
-		r.Get("/billing/config", s.handleBillingConfig)
+			r.Route("/user", func(r chi.Router) {
+				r.Get("/me", s.handleGetMe)
+			})
 
-		r.Route("/servers", func(r chi.Router) {
-			r.Get("/", s.handleListServers)
-			r.Post("/", s.handleCreateServer)
-			r.Get("/{id}", s.handleGetServer)
-			r.Delete("/{id}", s.handleDeleteServer)
-			r.Post("/{id}/start", s.handleStartServer)
-			r.Post("/{id}/stop", s.handleStopServer)
-			r.Post("/{id}/restart", s.handleRestartServer)
-			r.Post("/{id}/upgrade", s.handleUpgradeServer)
-			r.Post("/{id}/version", s.handleChangeVersion)
-			r.Get("/{id}/players", s.handleServerPlayers)
-			r.Get("/{id}/playerlists", s.handlePlayerLists)
-			r.Post("/{id}/players/action", s.handlePlayerAction)
-			r.Get("/{id}/logs", s.handleServerLogs)
-			r.Post("/{id}/command", s.handleServerCommand)
-			r.Get("/{id}/files", s.handleListFiles)
-			r.Get("/{id}/files/content", s.handleReadFile)
-			r.Put("/{id}/files/content", s.handleWriteFile)
-			r.Get("/{id}/files/download", s.handleDownloadFile)
-			r.Post("/{id}/files/upload", s.handleUploadFile)
-			r.Post("/{id}/files/mkdir", s.handleFileMkdir)
-			r.Delete("/{id}/files", s.handleDeleteFile)
-			r.Post("/{id}/checkout/paypal", s.handleCreatePayPalOrder)
-			r.Post("/{id}/checkout/paypal/{orderID}/capture", s.handleCapturePayPalOrder)
+			r.Get("/billing/config", s.handleBillingConfig)
+
+			r.Route("/servers", func(r chi.Router) {
+				r.Get("/", s.handleListServers)
+				r.Post("/", s.handleCreateServer)
+				r.Get("/{id}", s.handleGetServer)
+				r.Delete("/{id}", s.handleDeleteServer)
+				r.Post("/{id}/start", s.handleStartServer)
+				r.Post("/{id}/stop", s.handleStopServer)
+				r.Post("/{id}/restart", s.handleRestartServer)
+				r.Post("/{id}/upgrade", s.handleUpgradeServer)
+				r.Post("/{id}/version", s.handleChangeVersion)
+				r.Get("/{id}/players", s.handleServerPlayers)
+				r.Get("/{id}/playerlists", s.handlePlayerLists)
+				r.Post("/{id}/players/action", s.handlePlayerAction)
+				r.Get("/{id}/logs", s.handleServerLogs)
+				r.Get("/{id}/auth", s.handleServerAuth)
+				r.Post("/{id}/command", s.handleServerCommand)
+				r.Get("/{id}/files", s.handleListFiles)
+				r.Get("/{id}/files/content", s.handleReadFile)
+				r.Put("/{id}/files/content", s.handleWriteFile)
+				r.Get("/{id}/files/download", s.handleDownloadFile)
+				r.Post("/{id}/files/upload", s.handleUploadFile)
+				r.Post("/{id}/files/mkdir", s.handleFileMkdir)
+				r.Delete("/{id}/files", s.handleDeleteFile)
+				r.Post("/{id}/checkout/paypal", s.handleCreatePayPalOrder)
+				r.Post("/{id}/checkout/paypal/{orderID}/capture", s.handleCapturePayPalOrder)
+			})
 		})
 	})
 }

@@ -30,6 +30,11 @@ type GameDef struct {
 	RouterPort      int    // port interne ciblé par mc-router (si UsesMCRouter)
 	SupportsVersion bool
 
+	// NeedsAuth : le serveur exige une authentification interactive (OAuth
+	// device-code) au premier démarrage (ex. Hytale). Déclenche le watcher
+	// d'auth dans provisionServer et le statut "auth_required".
+	NeedsAuth bool
+
 	// Planchers de ressources : appliqués au provisioning même si le plan
 	// choisi est plus petit (ex. Satisfactory tourne en 4 Go même en "free").
 	MinRAMMb    int64
@@ -88,6 +93,21 @@ var games = map[string]GameDef{
 		},
 		Env: satisfactoryEnv,
 	},
+	"hytale": {
+		ID:           "hytale",
+		Image:        "ghcr.io/terkea/hytale-server:latest",
+		DataPath:     "/data",
+		UsesMCRouter: false, // QUIC/UDP, pas de routing par hostname → IP:port direct
+		NeedsAuth:    true,  // double OAuth interactif au 1er démarrage (cf. handlers_auth.go)
+		MinRAMMb:     4096,  // serveur Java 25, minimum jouable (offert pour l'instant)
+		MinCPUCores:  2.0,
+		Ports: func(base int) []PortMapping {
+			// Un seul port UDP (QUIC). On configure le serveur pour écouter sur
+			// le port alloué (SERVER_PORT), mapping identité hôte == interne.
+			return []PortMapping{{HostPort: base, Internal: base, Proto: "udp"}}
+		},
+		Env: hytaleEnv,
+	},
 }
 
 // GetGame retourne la définition d'un jeu, ou une erreur si l'id est inconnu.
@@ -133,6 +153,22 @@ func satisfactoryEnv(plan Plan, _ string, base int) []string {
 	}
 	if plan.MaxSlots > 0 {
 		env = append(env, fmt.Sprintf("MAXPLAYERS=%d", plan.MaxSlots))
+	}
+	return env
+}
+
+// hytaleEnv : config pour l'image ghcr.io/terkea/hytale-server (serveur Java 25).
+// Le port QUIC est aligné sur le port de base alloué. L'image télécharge et
+// authentifie le serveur au 1er démarrage (OAuth) — voir le watcher d'auth.
+func hytaleEnv(plan Plan, _ string, base int) []string {
+	env := []string{
+		fmt.Sprintf("SERVER_PORT=%d", base),
+		fmt.Sprintf("MEMORY=%dM", plan.RAMMb),
+		"AUTO_DOWNLOAD=true",
+		"AUTO_UPDATE=true",
+	}
+	if plan.MaxSlots > 0 {
+		env = append(env, fmt.Sprintf("MAX_PLAYERS=%d", plan.MaxSlots))
 	}
 	return env
 }

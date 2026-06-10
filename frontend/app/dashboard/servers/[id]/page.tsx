@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight } from "lucide-react";
+import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight, KeyRound } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { LanguageSwitcher } from "@/components/site-chrome";
 
@@ -34,10 +34,11 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 // Couleurs/animation par statut — les libellés viennent du dictionnaire i18n.
 const STATUS_META: Record<string, { dot: string; text: string; pulse?: boolean }> = {
-  running:  { dot: "bg-green-500",  text: "text-green-400" },
-  creating: { dot: "bg-yellow-500", text: "text-yellow-400", pulse: true },
-  stopped:  { dot: "bg-zinc-500",   text: "text-zinc-400" },
-  error:    { dot: "bg-red-500",    text: "text-red-400" },
+  running:       { dot: "bg-green-500",  text: "text-green-400" },
+  creating:      { dot: "bg-yellow-500", text: "text-yellow-400", pulse: true },
+  auth_required: { dot: "bg-amber-500",  text: "text-amber-400", pulse: true },
+  stopped:       { dot: "bg-zinc-500",   text: "text-zinc-400" },
+  error:         { dot: "bg-red-500",    text: "text-red-400" },
 };
 
 export default function ServerPage() {
@@ -149,6 +150,22 @@ export default function ServerPage() {
     setServer(await res.json());
     setLoading(false);
   }
+
+  // Authentification interactive (Hytale) : poll de l'URL+code OAuth
+  const [authInfo, setAuthInfo] = useState<{ pending: boolean; step?: number; url?: string; code?: string } | null>(null);
+  const authRequired = server?.status === "auth_required";
+  useEffect(() => {
+    if (!authRequired) { setAuthInfo(null); return; }
+    const tick = async () => {
+      try {
+        const res = await fetch(`${API}/api/v1/servers/${id}/auth`, { credentials: "include" });
+        if (res.ok) setAuthInfo(await res.json());
+      } catch { /* serveur pas prêt */ }
+    };
+    tick();
+    const t = setInterval(tick, 4000);
+    return () => clearInterval(t);
+  }, [id, authRequired]);
 
   // Joueurs + console : poll quand le serveur tourne
   const running = server?.status === "running";
@@ -422,6 +439,38 @@ export default function ServerPage() {
             )}
           </div>
         </div>
+
+        {/* Autorisation interactive (Hytale) : OAuth device-code */}
+        {authRequired && (
+          <div className="border border-amber-800/60 bg-amber-950/20 rounded-xl p-6 flex flex-col gap-3">
+            <div className="flex items-center gap-2 font-semibold text-amber-300">
+              <KeyRound className="w-5 h-5" /> {t.srv.authTitle}
+              {authInfo?.step ? (
+                <span className="text-xs font-normal text-amber-400/80">· {t.srv.authStep.replace("{n}", String(authInfo.step))}</span>
+              ) : null}
+            </div>
+            <p className="text-sm text-zinc-300">{t.srv.authDesc}</p>
+            {authInfo?.pending && authInfo.url ? (
+              <div className="flex flex-col gap-3">
+                <a
+                  href={authInfo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-fit items-center gap-2 bg-amber-500 hover:bg-amber-400 text-black font-semibold px-5 py-2.5 rounded-lg transition-colors"
+                >
+                  {t.srv.authVisit}
+                </a>
+                {authInfo.code && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-zinc-400">{t.srv.authCode}</span>
+                    <code className="font-mono text-lg tracking-widest text-amber-300 bg-black/40 px-3 py-1 rounded-md">{authInfo.code}</code>
+                  </div>
+                )}
+              </div>
+            ) : null}
+            <p className="text-xs text-zinc-500">{t.srv.authWaiting}</p>
+          </div>
+        )}
 
         {/* Upgrade / changement de plan */}
         <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
