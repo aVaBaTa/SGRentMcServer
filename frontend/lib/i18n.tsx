@@ -104,6 +104,36 @@ const fr = {
     ctaChoose: "Choisir",
   },
   planNames: { free: "Gratuit", starter: "Starter", standard: "Standard", pro: "Pro", extreme: "Extreme" } as Record<string, string>,
+  navGames: "Jeux",
+  hub: {
+    title: "Hébergement de serveurs de jeux",
+    subtitle: "Déploie ton serveur en quelques secondes. D'autres jeux arrivent bientôt.",
+    live: "Disponible",
+    soon: "Bientôt",
+    view: "Voir",
+    notify: "Être prévenu",
+  },
+  gameTag: {
+    minecraft: "Paper, Fabric, Forge — gratuit pour commencer.",
+    hytale: "Le prochain grand bac à sable. Prépare-toi avec Playrena.",
+    rust: "Survie multijoueur — serveurs performants.",
+    satisfactory: "Usines automatisées en coopération.",
+    ark: "Survie préhistorique — mods et cartes.",
+  } as Record<string, string>,
+  hytale: {
+    badge: "En développement — pas encore sorti",
+    title1: "Hébergement",
+    title2: "Hytale",
+    subtitle: "Hytale n'est pas encore disponible publiquement. Playrena prépare l'hébergement pour le jour du lancement : déploiement instantané, mods et console, comme pour Minecraft.",
+    bullets: [
+      "Déploiement en un clic dès la sortie",
+      "Mods et plugins gérés depuis le panel",
+      "Console, gestion des joueurs et fichiers inclus",
+    ],
+    cta: "Me prévenir au lancement",
+    back: "← Tous les jeux",
+    note: "Connecte-toi avec Discord pour être prévenu en premier.",
+  },
   footer: "Hébergement de serveurs de jeux instantané",
 };
 
@@ -155,6 +185,36 @@ const en: Dict = {
     ctaChoose: "Choose",
   },
   planNames: { free: "Free", starter: "Starter", standard: "Standard", pro: "Pro", extreme: "Extreme" },
+  navGames: "Games",
+  hub: {
+    title: "Game server hosting",
+    subtitle: "Deploy your server in seconds. More games coming soon.",
+    live: "Available",
+    soon: "Soon",
+    view: "View",
+    notify: "Get notified",
+  },
+  gameTag: {
+    minecraft: "Paper, Fabric, Forge — free to start.",
+    hytale: "The next big sandbox. Get ready with Playrena.",
+    rust: "Multiplayer survival — high-performance servers.",
+    satisfactory: "Automated factories in co-op.",
+    ark: "Prehistoric survival — mods and maps.",
+  } as Record<string, string>,
+  hytale: {
+    badge: "In development — not released yet",
+    title1: "Hytale",
+    title2: "Hosting",
+    subtitle: "Hytale isn't publicly available yet. Playrena is getting hosting ready for launch day: instant deploy, mods and console, just like Minecraft.",
+    bullets: [
+      "One-click deploy at release",
+      "Managed mods and plugins from the panel",
+      "Console, player management and files included",
+    ],
+    cta: "Notify me at launch",
+    back: "← All games",
+    note: "Sign in with Discord to be the first to know.",
+  },
   footer: "Instant game server hosting",
 };
 

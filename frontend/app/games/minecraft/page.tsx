@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import {
-  Server, Zap, Cpu, Shield, Star, Check, Clock, Headphones,
+  Zap, Cpu, Shield, Star, Check, Headphones,
   Puzzle, RefreshCw, ShieldCheck, Gauge,
 } from "lucide-react";
 import {
-  useI18n, PLANS, PERIODS, priceFor, fmtMoney, currencyCode, type Period, type Lang,
+  useI18n, PLANS, PERIODS, priceFor, fmtMoney, currencyCode, type Period,
 } from "@/lib/i18n";
+import { SiteNav, SiteFooter } from "@/components/site-chrome";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -22,26 +23,6 @@ const jsonLd = {
     "@type": "AggregateOffer", priceCurrency: "USD", lowPrice: "0", highPrice: "25", offerCount: 5,
   },
 };
-
-function LanguageSwitcher() {
-  const { lang, setLang } = useI18n();
-  const Btn = ({ l, label }: { l: Lang; label: string }) => (
-    <button
-      onClick={() => setLang(l)}
-      className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
-        lang === l ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
-      }`}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <div className="flex items-center gap-0.5 rounded-lg bg-zinc-900 border border-zinc-800 p-0.5">
-      <Btn l="fr" label="FR · CAD" />
-      <Btn l="en" label="EN · USD" />
-    </div>
-  );
-}
 
 export default function MinecraftHosting() {
   const { t, lang } = useI18n();
@@ -60,21 +41,7 @@ export default function MinecraftHosting() {
     <main className="flex flex-col min-h-screen">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      {/* Nav */}
-      <nav className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between sticky top-0 z-30 bg-zinc-950/80 backdrop-blur">
-        <div className="flex items-center gap-2 font-bold text-lg">
-          <Server className="w-5 h-5 text-green-400" />
-          Playrena
-        </div>
-        <div className="flex items-center gap-4 sm:gap-6 text-sm text-zinc-400">
-          <a href="#plans" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.plans}</a>
-          <a href="/blog" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.blog}</a>
-          <LanguageSwitcher />
-          <a href={`${API}/auth/discord`} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors font-medium">
-            {t.nav.login}
-          </a>
-        </div>
-      </nav>
+      <SiteNav />
 
       {/* Hero avec image en arrière-plan */}
       <section className="relative overflow-hidden">
@@ -223,13 +190,7 @@ export default function MinecraftHosting() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-zinc-800 px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-zinc-600 mt-auto">
-        <span>© {new Date().getFullYear()} Playrena — {t.footer}</span>
-        <div className="flex items-center gap-4">
-          <a href="/blog" className="hover:text-zinc-300 transition-colors flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {t.nav.blog}</a>
-        </div>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }
