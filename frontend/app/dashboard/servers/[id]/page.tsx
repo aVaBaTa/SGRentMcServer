@@ -261,44 +261,6 @@ export default function ServerPage() {
           </div>
         </div>
 
-        {/* Console */}
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 font-semibold">
-              <Terminal className="w-5 h-5 text-green-400" /> Console
-            </div>
-            {running && players && (
-              <span className="flex items-center gap-1.5 text-xs text-zinc-400">
-                <Users className="w-3.5 h-3.5" />
-                {players.online}/{players.max}
-                {players.players.length > 0 && <span className="text-zinc-500">· {players.players.join(", ")}</span>}
-              </span>
-            )}
-          </div>
-          {running ? (
-            <>
-              <pre ref={logRef} className="h-72 overflow-auto bg-black/60 rounded-lg p-3 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
-                {logs || "Chargement des logs…"}
-              </pre>
-              <form onSubmit={sendCommand} className="mt-3 flex gap-2">
-                <span className="flex items-center text-zinc-500 font-mono text-sm">/</span>
-                <input
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  placeholder="commande (ex: say bonjour, time set day, op Pseudo)"
-                  className="flex-1 bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:outline-none focus:border-green-500"
-                />
-                <button type="submit" disabled={sending || !command.trim()}
-                  className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
-                  <SendHorizontal className="w-4 h-4" /> Envoyer
-                </button>
-              </form>
-            </>
-          ) : (
-            <p className="text-sm text-zinc-500">Démarre le serveur pour accéder à la console et voir les joueurs connectés.</p>
-          )}
-        </div>
-
         {/* Upgrade / changement de plan */}
         <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
           <div className="flex items-center gap-2 font-semibold mb-1">
@@ -354,6 +316,44 @@ export default function ServerPage() {
             >
               {upgrading ? "Application..." : selectedPlan ? "Repasser au plan Gratuit" : "Choisis un plan"}
             </button>
+          )}
+        </div>
+
+        {/* Console */}
+        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 font-semibold">
+              <Terminal className="w-5 h-5 text-green-400" /> Console
+            </div>
+            {running && players && (
+              <span className="flex items-center gap-1.5 text-xs text-zinc-400">
+                <Users className="w-3.5 h-3.5" />
+                {players.online}/{players.max}
+                {players.players.length > 0 && <span className="text-zinc-500">· {players.players.join(", ")}</span>}
+              </span>
+            )}
+          </div>
+          {running ? (
+            <>
+              <pre ref={logRef} className="h-72 overflow-auto bg-black/60 rounded-lg p-3 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
+                {logs || "Chargement des logs…"}
+              </pre>
+              <form onSubmit={sendCommand} className="mt-3 flex gap-2">
+                <span className="flex items-center text-zinc-500 font-mono text-sm">/</span>
+                <input
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
+                  placeholder="commande (ex: say bonjour, time set day, op Pseudo)"
+                  className="flex-1 bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:outline-none focus:border-green-500"
+                />
+                <button type="submit" disabled={sending || !command.trim()}
+                  className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+                  <SendHorizontal className="w-4 h-4" /> Envoyer
+                </button>
+              </form>
+            </>
+          ) : (
+            <p className="text-sm text-zinc-500">Démarre le serveur pour accéder à la console et voir les joueurs connectés.</p>
           )}
         </div>
 
