@@ -52,7 +52,7 @@
       </div>
 
       <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">Disque Hôte</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">Disque (cluster)</div>
         <div class="flex items-end justify-between mb-2">
           <span id="host-disk-val" class="text-2xl font-bold">—</span>
           <span id="host-disk-pct" class="text-sm text-zinc-400">—</span>
@@ -189,6 +189,8 @@
       if (!lastSnap) return;
       document.getElementById('nodes').innerHTML = (lastSnap.nodes || []).map(n => {
         const memPct = n.mem_total_mb ? Math.min(n.mem_used_mb / n.mem_total_mb * 100, 100) : 0;
+        const diskTot = (n.disk_used_gb || 0) + (n.disk_avail_gb || 0);
+        const diskPct = diskTot ? Math.min(n.disk_used_gb / diskTot * 100, 100) : 0;
         const sel = nodeFilter === n.id;
         return `
           <div onclick="toggleNode('${n.id}')" class="cursor-pointer rounded-xl border ${sel ? 'border-green-500 ring-1 ring-green-500/40' : (n.online ? 'border-zinc-800 hover:border-zinc-600' : 'border-red-900')} bg-zinc-900 p-5 transition-colors">
@@ -201,6 +203,8 @@
             </div>
             <div class="flex justify-between text-xs mb-1"><span class="text-zinc-400">RAM serveurs</span><span class="font-mono">${fmtMB(n.mem_used_mb)} / ${fmtMB(n.mem_total_mb)}</span></div>
             <div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden"><div class="bar h-full ${barColor(memPct)}" style="width:${memPct}%"></div></div>
+            <div class="flex justify-between text-xs mb-1 mt-3"><span class="text-zinc-400">Disque</span><span class="font-mono">${n.disk_used_gb ? n.disk_used_gb.toFixed(0)+' / '+diskTot.toFixed(0)+' GiB' : '—'}</span></div>
+            <div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden"><div class="bar h-full ${barColor(diskPct)}" style="width:${diskPct}%"></div></div>
           </div>`;
       }).join('');
     }
@@ -242,7 +246,7 @@
         const loadBar = document.getElementById('host-load-bar');
         loadBar.style.width = cpuPct + '%'; loadBar.className = 'bar h-full ' + barColor(cpuPct);
 
-        document.getElementById('host-disk-val').textContent = h.disk_used_gb.toFixed(0) + ' / ' + h.disk_total_gb.toFixed(0) + ' GB';
+        document.getElementById('host-disk-val').textContent = h.disk_used_gb.toFixed(0) + ' / ' + h.disk_total_gb.toFixed(0) + ' GiB';
         document.getElementById('host-disk-pct').textContent = h.disk_percent.toFixed(0) + '%';
         const diskBar = document.getElementById('host-disk-bar');
         diskBar.style.width = h.disk_percent + '%'; diskBar.className = 'bar h-full ' + barColor(h.disk_percent);

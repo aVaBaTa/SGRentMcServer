@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"runtime"
 	"sort"
@@ -92,12 +93,15 @@ type HostMetric struct {
 
 // NodeSummary = résumé par node physique.
 type NodeSummary struct {
-	ID         string  `json:"id"`
-	CPUCount   int     `json:"cpu_count"`
-	MemTotalMB float64 `json:"mem_total_mb"`
-	MemUsedMB  float64 `json:"mem_used_mb"`
-	Containers int     `json:"containers"`
-	Online     bool    `json:"online"`
+	ID          string  `json:"id"`
+	CPUCount    int     `json:"cpu_count"`
+	MemTotalMB  float64 `json:"mem_total_mb"`
+	MemUsedMB   float64 `json:"mem_used_mb"`
+	DiskTotalGB float64 `json:"disk_total_gb"`
+	DiskUsedGB  float64 `json:"disk_used_gb"`
+	DiskAvailGB float64 `json:"disk_avail_gb"`
+	Containers  int     `json:"containers"`
+	Online      bool    `json:"online"`
 }
 
 type Snapshot struct {
@@ -108,8 +112,9 @@ type Snapshot struct {
 }
 
 type dockerNode struct {
-	id  string
-	cli *client.Client
+	id   string
+	host string // ex: unix:///var/run/docker.sock ou ssh://simon@10.0.0.110
+	cli  *client.Client
 }
 
 type Collector struct {
@@ -145,7 +150,7 @@ func NewCollector(hostRoot, nodesSpec string) (*Collector, error) {
 		if err != nil {
 			continue // node inaccessible au démarrage : on l'ignore
 		}
-		c.nodes = append(c.nodes, &dockerNode{id: parts[0], cli: cli})
+		c.nodes = append(c.nodes, &dockerNode{id: parts[0], host: parts[1], cli: cli})
 	}
 	if len(c.nodes) == 0 {
 		return nil, fmt.Errorf("aucun node Docker accessible")
@@ -228,6 +233,14 @@ func (c *Collector) Collect(ctx context.Context) (*Snapshot, error) {
 			}
 			sum.MemUsedMB = usedMB
 
+			// Disque hôte du node (local via statfs, distant via ssh df)
+			if tB, uB, aB, ok := c.nodeDisk(ctx, n); ok {
+				const giB = 1 << 30
+				sum.DiskTotalGB = tB / giB
+				sum.DiskUsedGB = uB / giB
+				sum.DiskAvailGB = aB / giB
+			}
+
 			mu.Lock()
 			allMetrics = append(allMetrics, local...)
 			summaries = append(summaries, sum)
@@ -253,6 +266,19 @@ func (c *Collector) Collect(ctx context.Context) (*Snapshot, error) {
 	host.ContainerTotal = len(allMetrics)
 	host.ContainerUp = up
 	host.NetRxMBs, host.NetTxMBs, host.NetRxTotalGB, host.NetTxTotalGB = c.netRate(allMetrics)
+
+	// Disque hôte = total agrégé des nodes (comme df, % = used/(used+avail))
+	var dTot, dUsed, dAvail float64
+	for _, s := range summaries {
+		dTot += s.DiskTotalGB
+		dUsed += s.DiskUsedGB
+		dAvail += s.DiskAvailGB
+	}
+	host.DiskTotalGB = dTot
+	host.DiskUsedGB = dUsed
+	if dUsed+dAvail > 0 {
+		host.DiskPercent = dUsed / (dUsed + dAvail) * 100
+	}
 
 	return &Snapshot{Host: host, Nodes: summaries, Containers: allMetrics, Timestamp: time.Now()}, nil
 }
@@ -379,26 +405,49 @@ func (c *Collector) hostMetric(ctx context.Context) HostMetric {
 		h.Load1, h.Load5, h.Load15 = l1, l5, l15
 	}
 
-	// Disque via statfs sur le FS hôte monté. On calque le calcul de `df` :
-	//  - used  = blocs totaux - blocs libres (Bfree, inclut les blocs réservés)
-	//  - avail = blocs dispo à l'utilisateur (Bavail, hors réservé root)
-	//  - %     = used / (used + avail)
-	// et on affiche en Gio (1<<30) comme `df -h`.
-	const giB = 1 << 30
-	var st unix.Statfs_t
-	if err := unix.Statfs(c.hostRoot, &st); err == nil {
-		bs := float64(st.Bsize)
-		total := float64(st.Blocks) * bs
-		used := float64(st.Blocks-st.Bfree) * bs
-		avail := float64(st.Bavail) * bs
-		h.DiskTotalGB = total / giB
-		h.DiskUsedGB = used / giB
-		if used+avail > 0 {
-			h.DiskPercent = used / (used + avail) * 100
-		}
-	}
-
+	// Le disque est agrégé sur tous les nodes dans Collect (cf. nodeDisk).
 	return h
+}
+
+// nodeDisk retourne (total, used, avail) en octets du disque hôte d'un node.
+// Calque `df` : used = blocs totaux - blocs libres ; avail = blocs dispo user.
+// Node local (unix://) → statfs sur le FS monté ; node distant (ssh://) → `df` via ssh.
+func (c *Collector) nodeDisk(ctx context.Context, n *dockerNode) (total, used, avail float64, ok bool) {
+	if n.host == "" || strings.HasPrefix(n.host, "unix://") {
+		var st unix.Statfs_t
+		if err := unix.Statfs(c.hostRoot, &st); err != nil {
+			return 0, 0, 0, false
+		}
+		bs := float64(st.Bsize)
+		return float64(st.Blocks) * bs, float64(st.Blocks-st.Bfree) * bs, float64(st.Bavail) * bs, true
+	}
+	if strings.HasPrefix(n.host, "ssh://") {
+		addr := strings.TrimPrefix(n.host, "ssh://") // user@ip[:port]
+		cctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(cctx, "ssh", "-o", "BatchMode=yes",
+			"-o", "ConnectTimeout=5", addr, "df -B1 /").Output()
+		if err != nil {
+			return 0, 0, 0, false
+		}
+		// 2e ligne : Filesystem 1B-blocks Used Available Use% Mounted
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		if len(lines) < 2 {
+			return 0, 0, 0, false
+		}
+		f := strings.Fields(lines[len(lines)-1])
+		if len(f) < 4 {
+			return 0, 0, 0, false
+		}
+		t, e1 := strconv.ParseFloat(f[1], 64)
+		u, e2 := strconv.ParseFloat(f[2], 64)
+		a, e3 := strconv.ParseFloat(f[3], 64)
+		if e1 != nil || e2 != nil || e3 != nil {
+			return 0, 0, 0, false
+		}
+		return t, u, a, true
+	}
+	return 0, 0, 0, false
 }
 
 // netRate agrège le trafic réseau cumulé de tous les containers et calcule
