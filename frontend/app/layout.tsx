@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import { LanguageProvider } from "@/lib/i18n";
 
 const GADS_ID = "AW-18226964787";
 
@@ -51,7 +52,9 @@ export default function RootLayout({
       lang="fr"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">{children}</body>
+      <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">
+        <LanguageProvider>{children}</LanguageProvider>
+      </body>
 
       {/* Google tag (gtag.js) — Google Ads */}
       <Script
