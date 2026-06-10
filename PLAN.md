@@ -333,7 +333,9 @@ L'architecture modulaire (image Docker par jeu, même orchestrateur) permet d'aj
 - [ ] WebSocket console temps réel
 
 ### Phase 3 — Billing
-- [x] **PayPal — ACTIF & testé bout-en-bout** ✓ (2026-06-09) — paiement sandbox complété, plan appliqué automatiquement (standard 7$ → 4GB/2cpu)
+- [x] **PayPal — EN LIVE / PRODUCTION** ✓ (2026-06-10) — `PAYPAL_ENV=live` + identifiants Live (app PayPal Business), validés contre `api-m.paypal.com` (token 200). Paiements réels. Le client-id live est servi au SDK via `/billing/config` (pas de rebuild front nécessaire, config runtime).
+  - Historique : testé d'abord en sandbox (2026-06-09, standard 7$ → 4GB/2cpu OK), puis basculé en live (2026-06-10).
+  - ⚠️ Modèle actuel = **paiement unique** (Orders API v2), pas d'abonnement récurrent. Upgrade = recrée le container (RAM/CPU/MAX_PLAYERS), monde conservé.
   - 🐛 Fix : `UpdateResources` doit set `MemorySwap = Memory` sinon Docker refuse silencieusement une AUGMENTATION de RAM (swap < memory). Corrigé dans create + update.
   - ⚠️ Connu : label `sgrent.ram_mb` n'est pas mis à jour après upgrade (immuable sans recréer) → le monitor admin sous-estime la RAM utilisée. À corriger (recréer au lieu d'updater, ou stocker l'alloc ailleurs).
   - ⚠️ Robustesse : le handler capture ignore l'erreur de `UpdateResources` (à logger/vérifier).
