@@ -31,17 +31,24 @@ export const PERIODS: Record<Period, { months: number; discount: number }> = {
   annually: { months: 12, discount: 0.2 },
 };
 
-// Prix mensuel effectif (avec rabais) arrondi, et total facturé pour la période.
+// Prix mensuel effectif (avec rabais) et total facturé pour la période.
+// On garde les décimales pour que la réduction soit réellement visible
+// (ex. 4 $ × -10 % = 3,60 $ et non arrondi à 4 $).
 export function priceFor(plan: PlanDef, lang: Lang, period: Period) {
   const base = lang === "fr" ? plan.cad : plan.usd;
   const { months, discount } = PERIODS[period];
-  const monthly = Math.round(base * (1 - discount));
-  const total = monthly * months;
+  const monthly = Math.round(base * (1 - discount) * 100) / 100;
+  const total = Math.round(monthly * months * 100) / 100;
   return { monthly, total, months, discount };
 }
 
+// Formate un montant. Les prix entiers restent sans décimale (4 $),
+// les prix réduits affichent 2 décimales (3,60 $ / 3.60$).
 export function fmtMoney(amount: number, lang: Lang): string {
-  return lang === "fr" ? `${amount} $` : `$${amount}`;
+  const isInt = Number.isInteger(amount);
+  const fr = isInt ? `${amount}` : amount.toFixed(2).replace(".", ",");
+  const en = isInt ? `${amount}` : amount.toFixed(2);
+  return lang === "fr" ? `${fr} $` : `$${en}`;
 }
 
 export const currencyCode = (lang: Lang) => (lang === "fr" ? "CAD" : "USD");
