@@ -60,7 +60,7 @@ type ContainerMetric struct {
 	MemUsageMB float64 `json:"mem_usage_mb"`
 	MemLimitMB float64 `json:"mem_limit_mb"`
 	MemPercent float64 `json:"mem_percent"`
-	CPULimit   float64 `json:"cpu_limit"` // cœurs alloués (0 = illimité)
+	CPULimit   float64 `json:"cpu_limit"`      // cœurs alloués (0 = illimité)
 	HasPlayers bool    `json:"has_players"`    // infos joueurs dispo (serveur MC géré)
 	PlayersOn  int     `json:"players_online"` // joueurs connectés
 	PlayersMax int     `json:"players_max"`    // slots max
@@ -85,8 +85,8 @@ type HostMetric struct {
 	DiskPercent    float64 `json:"disk_percent"`
 	ContainerTotal int     `json:"container_total"`
 	ContainerUp    int     `json:"container_up"`
-	NetRxMBs       float64 `json:"net_rx_mbs"`    // débit entrant MB/s
-	NetTxMBs       float64 `json:"net_tx_mbs"`    // débit sortant MB/s
+	NetRxMBs       float64 `json:"net_rx_mbs"` // débit entrant MB/s
+	NetTxMBs       float64 `json:"net_tx_mbs"` // débit sortant MB/s
 	NetRxTotalGB   float64 `json:"net_rx_total_gb"`
 	NetTxTotalGB   float64 `json:"net_tx_total_gb"`
 }
@@ -185,6 +185,25 @@ func (c *Collector) RemoveContainer(ctx context.Context, id string) error {
 		return fmt.Errorf("container %s introuvable", id)
 	}
 	return n.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
+}
+
+// StartContainer démarre un container arrêté (action admin).
+func (c *Collector) StartContainer(ctx context.Context, id string) error {
+	n := c.findNode(ctx, id)
+	if n == nil {
+		return fmt.Errorf("container %s introuvable", id)
+	}
+	return n.cli.ContainerStart(ctx, id, container.StartOptions{})
+}
+
+// RestartContainer redémarre un container (action admin).
+func (c *Collector) RestartContainer(ctx context.Context, id string) error {
+	n := c.findNode(ctx, id)
+	if n == nil {
+		return fmt.Errorf("container %s introuvable", id)
+	}
+	timeout := 15
+	return n.cli.ContainerRestart(ctx, id, container.StopOptions{Timeout: &timeout})
 }
 
 func (c *Collector) Collect(ctx context.Context) (*Snapshot, error) {

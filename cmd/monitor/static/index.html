@@ -80,6 +80,37 @@
       </div>
     </section>
 
+    <!-- Serveurs Playrena (depuis la DB) -->
+    <section class="mb-8">
+      <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
+        <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide">Serveurs Playrena <span id="srv-count" class="text-zinc-600"></span></h2>
+        <div id="srv-filter" class="flex flex-wrap gap-1.5"></div>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Serveurs</div><div id="srv-total" class="text-xl font-bold">—</div></div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Revenu est. /mois</div><div id="srv-mrr" class="text-xl font-bold text-green-400">—</div></div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">RAM allouée</div><div id="srv-ram" class="text-xl font-bold">—</div></div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">vCPU alloués</div><div id="srv-cpu" class="text-xl font-bold">—</div></div>
+      </div>
+      <div class="rounded-xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs text-zinc-500 border-b border-zinc-800">
+              <th class="px-4 py-3 font-medium">Statut</th>
+              <th class="px-4 py-3 font-medium">Jeu</th>
+              <th class="px-4 py-3 font-medium">Serveur</th>
+              <th class="px-4 py-3 font-medium">Propriétaire</th>
+              <th class="px-4 py-3 font-medium">Plan</th>
+              <th class="px-4 py-3 font-medium">RAM</th>
+              <th class="px-4 py-3 font-medium">Node</th>
+              <th class="px-4 py-3 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="srv-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Nodes (serveurs physiques) -->
     <section class="mb-8">
       <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Nodes (serveurs physiques)</h2>
@@ -159,20 +190,25 @@
 
           <!-- Actions admin -->
           <div class="flex gap-2 mt-4 pt-3 border-t border-zinc-800">
-            ${running ? `<button onclick="ctrl('${c.id}','stop','${c.name}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-yellow-900/60 text-yellow-400 transition-colors">Forcer l'arrêt</button>` : ''}
+            ${running
+              ? `<button onclick="ctrl('${c.id}','restart','${c.name}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-blue-900/60 text-blue-300 transition-colors">Redémarrer</button>
+                 <button onclick="ctrl('${c.id}','stop','${c.name}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-yellow-900/60 text-yellow-400 transition-colors">Arrêter</button>`
+              : `<button onclick="ctrl('${c.id}','start','${c.name}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-green-900/60 text-green-400 transition-colors">Démarrer</button>`}
             <button onclick="ctrl('${c.id}','delete','${c.name}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-red-900/60 text-red-400 transition-colors">Supprimer</button>
           </div>
         </div>`;
     }
 
     async function ctrl(id, action, name) {
-      const verb = action === 'stop' ? "forcer l'arrêt de" : "SUPPRIMER";
-      if (!confirm(`Veux-tu vraiment ${verb} le container "${name}" ?`)) return;
+      const verbs = { stop: "arrêter", delete: "SUPPRIMER", start: "démarrer", restart: "redémarrer" };
+      const destructive = action === 'stop' || action === 'delete';
+      if (destructive && !confirm(`Veux-tu vraiment ${verbs[action]} "${name}" ?`)) return;
       try {
         const res = await fetch(`api/containers/${id}/${action}`, { method: 'POST' });
         if (!res.ok && res.status !== 204) alert('Erreur: ' + (await res.text()));
       } catch (e) { alert('Erreur de connexion'); }
       refresh();
+      fetchServers();
     }
 
     // --- Cluster : sélection de node + filtrage des containers ---
@@ -293,10 +329,75 @@
       } catch (e) { /* ignore */ }
     }
 
+    // --- Serveurs Playrena (DB) ---
+    const PLAN_PRICE = { free: 0, starter: 2, standard: 5, pro: 9, extreme: 16 }; // USD/mois
+    const SRV_STATUS = {
+      running:       { dot: 'bg-green-400',  txt: 'text-green-400',  label: 'En ligne' },
+      creating:      { dot: 'bg-yellow-400', txt: 'text-yellow-400', label: 'Création' },
+      auth_required: { dot: 'bg-amber-400',  txt: 'text-amber-400',  label: 'Auth requise' },
+      stopped:       { dot: 'bg-zinc-500',   txt: 'text-zinc-400',   label: 'Arrêté' },
+      error:         { dot: 'bg-red-500',    txt: 'text-red-400',    label: 'Erreur' },
+    };
+    let lastServers = [];
+    let gameFilter = '';
+    function setGameFilter(g) { gameFilter = (gameFilter === g) ? '' : g; renderServers(); }
+
+    function renderServers() {
+      const all = lastServers;
+      const games = [...new Set(all.map(s => s.game))].sort();
+      const chip = (g, label, count, active) =>
+        `<button onclick="setGameFilter('${g}')" class="text-xs px-2.5 py-1 rounded-md border ${active ? 'border-green-500 text-green-400 bg-green-500/10' : 'border-zinc-700 text-zinc-400 hover:text-zinc-200'}">${label} <span class="opacity-60">${count}</span></button>`;
+      document.getElementById('srv-filter').innerHTML =
+        chip('', 'Tous', all.length, gameFilter === '') +
+        games.map(g => chip(g, g, all.filter(s => s.game === g).length, gameFilter === g)).join('');
+
+      const list = gameFilter ? all.filter(s => s.game === gameFilter) : all;
+      const mrr = list.reduce((a, s) => a + (PLAN_PRICE[s.plan] || 0), 0);
+      const ram = list.reduce((a, s) => a + (s.ram_mb || 0), 0);
+      const cpu = list.reduce((a, s) => a + (s.cpu_cores || 0), 0);
+      document.getElementById('srv-count').textContent = `(${list.length})`;
+      document.getElementById('srv-total').textContent = list.length;
+      document.getElementById('srv-mrr').textContent = '$' + mrr;
+      document.getElementById('srv-ram').textContent = (ram / 1024).toFixed(0) + ' GB';
+      document.getElementById('srv-cpu').textContent = cpu.toFixed(cpu % 1 ? 1 : 0);
+
+      document.getElementById('srv-rows').innerHTML = list.length ? list.map(s => {
+        const st = SRV_STATUS[s.status] || { dot: 'bg-zinc-500', txt: 'text-zinc-400', label: s.status };
+        const cid = s.container_id, running = s.status === 'running';
+        const btn = (a, sym, cls) => `<button onclick="ctrl('${cid}','${a}','${s.subdomain}')" class="text-xs px-2 py-1 rounded bg-zinc-800 ${cls}">${sym}</button>`;
+        const acts = cid
+          ? (running ? btn('restart', '↻', 'hover:bg-blue-900/60 text-blue-300') + btn('stop', '■', 'hover:bg-yellow-900/60 text-yellow-400')
+                     : btn('start', '▶', 'hover:bg-green-900/60 text-green-400'))
+            + btn('delete', '🗑', 'hover:bg-red-900/60 text-red-400')
+          : '<span class="text-xs text-zinc-600">—</span>';
+        return `<tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30">
+          <td class="px-4 py-3"><span class="inline-flex items-center gap-2"><span class="w-2 h-2 rounded-full ${st.dot}"></span><span class="${st.txt}">${st.label}</span></span></td>
+          <td class="px-4 py-3"><span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">${s.game}</span></td>
+          <td class="px-4 py-3"><div class="font-medium">${s.subdomain || '—'}</div><div class="text-[11px] text-zinc-600 font-mono">:${s.port || '—'}</div></td>
+          <td class="px-4 py-3 text-zinc-400">${s.owner || '—'}</td>
+          <td class="px-4 py-3 capitalize">${s.plan}</td>
+          <td class="px-4 py-3 font-mono">${(s.ram_mb / 1024).toFixed(0)} GB</td>
+          <td class="px-4 py-3 text-zinc-500">${s.node}</td>
+          <td class="px-4 py-3"><div class="flex gap-1.5">${acts}</div></td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="8" class="px-4 py-4 text-zinc-600">Aucun serveur</td></tr>';
+    }
+
+    async function fetchServers() {
+      try {
+        const res = await fetch('api/servers');
+        if (!res.ok) { document.getElementById('srv-rows').innerHTML = '<tr><td colspan="8" class="px-4 py-4 text-zinc-600">Liste indisponible</td></tr>'; return; }
+        lastServers = await res.json();
+        renderServers();
+      } catch (e) { /* ignore */ }
+    }
+
     refresh();
     setInterval(refresh, 2000);
     fetchUsers();
     setInterval(fetchUsers, 15000);
+    fetchServers();
+    setInterval(fetchServers, 5000);
   </script>
 </body>
 </html>

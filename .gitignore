@@ -3,3 +3,4 @@ bin/
 *.exe
 CREDENTIALS.md
 secrets/
+/monitor
