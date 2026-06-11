@@ -57,7 +57,7 @@ export const currencyCode = (lang: Lang) => (lang === "fr" ? "CAD" : "USD");
 type Dict = typeof fr;
 const fr = {
   langName: "Français (CA)",
-  nav: { plans: "Plans", blog: "Blog", games: "Jeux — bientôt", login: "Se connecter" },
+  nav: { plans: "Plans", blog: "Blog", games: "Jeux — bientôt", mods: "Mods", login: "Se connecter" },
   rating: "Serveurs dédiés",
   ratingSuffix: "Fait au Québec",
   hero: {
@@ -357,7 +357,7 @@ const fr = {
 
 const en: Dict = {
   langName: "English (US)",
-  nav: { plans: "Plans", blog: "Blog", games: "Games — soon", login: "Sign in" },
+  nav: { plans: "Plans", blog: "Blog", games: "Games — soon", mods: "Mods", login: "Sign in" },
   rating: "Dedicated servers",
   ratingSuffix: "Made in Canada",
   hero: {

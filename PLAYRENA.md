@@ -1,8 +1,28 @@
 # Playrena — État du projet (contexte pour nouvelles conversations)
 
-> Fichier de reprise rapide. Mentionne **« Playrena »** dans une nouvelle conversation et
-> pointe vers ce fichier pour recharger tout le contexte.
-> Dernière mise à jour : 2026-06-10.
+> Fichier de reprise rapide. Mentionne **« Playrena »** dans une nouvelle conversation
+> (le skill `playrena` charge ce fichier + l'état git) OU dis simplement
+> **« va lire PLAYRENA.md »**.
+> Dernière mise à jour : 2026-06-11.
+
+## 🔄 Reprise rapide (à exécuter au début d'une nouvelle conversation)
+
+1. Lire ce fichier en entier (archi, état des jeux, **backlog #A→#F**, blocage UDP).
+2. Récupérer les **commits récents des 3 repos** (SGRentMcServer travaille sur **`live`**) :
+
+```bash
+for d in SGRentMcServer SGPortfolio SGMail; do
+  r=~/Shared_Projects/2026/$d
+  echo "===== $d ($(git -C "$r" branch --show-current)) ====="
+  git -C "$r" log --oneline -8
+  git -C "$r" status --short
+done
+```
+
+3. (Si ops/déploiement) `docker ps --format '{{.Names}}\t{{.Status}}' | grep -E 'mcserver|portfolio|mailserver|sgrent-'`.
+
+→ Branches de travail actuelles : **SGRentMcServer = `live`**, SGPortfolio = `live`
+(+ `Claude/feature/portfolio-release-filter` pour le filtre releases), SGMail = `Claude/feature/mailserver`.
 
 ## C'est quoi
 

@@ -46,6 +46,7 @@ export function SiteNav() {
       </a>
       <div className="flex items-center gap-4 sm:gap-6 text-sm text-zinc-400">
         <a href="/games" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.navGames}</a>
+        <a href="/mods" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.mods}</a>
         <a href="/blog" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.blog}</a>
         <LanguageSwitcher />
         <a href={`${API}/auth/discord`} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors font-medium">
