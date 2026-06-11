@@ -11,10 +11,10 @@ const VERSIONS = ["LATEST", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1", "1
 
 const PLANS = [
   { id: "free", ram: "1 GB", cores: 1, price: "0$" },
-  { id: "starter", ram: "2 GB", cores: 1, price: "3$/mo" },
-  { id: "standard", ram: "4 GB", cores: 2, price: "7$/mo" },
-  { id: "pro", ram: "8 GB", cores: 4, price: "14$/mo" },
-  { id: "extreme", ram: "16 GB", cores: 6, price: "25$/mo" },
+  { id: "starter", ram: "2 GB", cores: 1, price: "2$/mo" },
+  { id: "standard", ram: "4 GB", cores: 2, price: "5$/mo" },
+  { id: "pro", ram: "8 GB", cores: 4, price: "9$/mo" },
+  { id: "extreme", ram: "16 GB", cores: 6, price: "16$/mo" },
 ];
 
 interface GameServer {

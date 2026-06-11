@@ -17,10 +17,10 @@ export interface PlanDef {
 
 export const PLANS: PlanDef[] = [
   { id: "free", usd: 0, cad: 0, ram: "1 GB", cpu: 1, slots: 5 },
-  { id: "starter", usd: 3, cad: 4, ram: "2 GB", cpu: 1, slots: 20 },
-  { id: "standard", usd: 7, cad: 9, ram: "4 GB", cpu: 2, slots: 50, popular: true },
-  { id: "pro", usd: 14, cad: 19, ram: "8 GB", cpu: 4, slots: 100 },
-  { id: "extreme", usd: 25, cad: 34, ram: "16 GB", cpu: 6, slots: 0 },
+  { id: "starter", usd: 2, cad: 3, ram: "2 GB", cpu: 1, slots: 20 },
+  { id: "standard", usd: 5, cad: 6, ram: "4 GB", cpu: 2, slots: 50, popular: true },
+  { id: "pro", usd: 9, cad: 12, ram: "8 GB", cpu: 4, slots: 100 },
+  { id: "extreme", usd: 16, cad: 22, ram: "16 GB", cpu: 6, slots: 0 },
 ];
 
 export type Period = "monthly" | "quarterly" | "annually";
@@ -177,6 +177,12 @@ const fr = {
   },
   dash: {
     title: "Mes serveurs",
+    hubLead: "Choisis un jeu pour créer et gérer tes serveurs.",
+    chooseGame: "Choisis un jeu",
+    allServers: "Tous mes serveurs",
+    backToHub: "← Tableau de bord",
+    manage: "Gérer",
+    gameServersTitle: "Tes serveurs {game}",
     leadPre: "Crée un serveur ",
     leadMid: " ",
     leadFree: "gratuitement",
@@ -434,6 +440,12 @@ const en: Dict = {
   },
   dash: {
     title: "My servers",
+    hubLead: "Pick a game to create and manage your servers.",
+    chooseGame: "Choose a game",
+    allServers: "All my servers",
+    backToHub: "← Dashboard",
+    manage: "Manage",
+    gameServersTitle: "Your {game} servers",
     leadPre: "Create a ",
     leadMid: " server ",
     leadFree: "for free",
