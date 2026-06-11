@@ -92,6 +92,11 @@
         <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">RAM allouée</div><div id="srv-ram" class="text-xl font-bold">—</div></div>
         <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">vCPU alloués</div><div id="srv-cpu" class="text-xl font-bold">—</div></div>
       </div>
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs text-zinc-500">Actions en masse <span id="bulk-scope" class="text-zinc-400"></span> :</span>
+        <button onclick="bulkAction('restart')" class="text-xs px-2.5 py-1 rounded-md border border-blue-800 text-blue-300 hover:bg-blue-900/40 transition-colors">↻ Tout redémarrer</button>
+        <button onclick="bulkAction('stop')" class="text-xs px-2.5 py-1 rounded-md border border-yellow-800 text-yellow-300 hover:bg-yellow-900/40 transition-colors">■ Tout arrêter</button>
+      </div>
       <div class="rounded-xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
@@ -356,6 +361,7 @@
       const ram = list.reduce((a, s) => a + (s.ram_mb || 0), 0);
       const cpu = list.reduce((a, s) => a + (s.cpu_cores || 0), 0);
       document.getElementById('srv-count').textContent = `(${list.length})`;
+      document.getElementById('bulk-scope').textContent = gameFilter ? `(${gameFilter})` : '(tous les jeux)';
       document.getElementById('srv-total').textContent = list.length;
       document.getElementById('srv-mrr').textContent = '$' + mrr;
       document.getElementById('srv-ram').textContent = (ram / 1024).toFixed(0) + ' GB';
@@ -381,6 +387,18 @@
           <td class="px-4 py-3"><div class="flex gap-1.5">${acts}</div></td>
         </tr>`;
       }).join('') : '<tr><td colspan="8" class="px-4 py-4 text-zinc-600">Aucun serveur</td></tr>';
+    }
+
+    // Actions en masse sur la liste filtrée (tous, ou le jeu sélectionné).
+    async function bulkAction(action) {
+      const list = (gameFilter ? lastServers.filter(s => s.game === gameFilter) : lastServers).filter(s => s.container_id);
+      if (!list.length) { alert('Aucun serveur à traiter.'); return; }
+      const verbs = { stop: 'arrêter', restart: 'redémarrer' };
+      const scope = gameFilter ? `du jeu "${gameFilter}"` : '(tous jeux)';
+      if (!confirm(`Veux-tu vraiment ${verbs[action]} ${list.length} serveur(s) ${scope} ?`)) return;
+      await Promise.allSettled(list.map(s => fetch(`api/containers/${s.container_id}/${action}`, { method: 'POST' })));
+      refresh();
+      fetchServers();
     }
 
     async function fetchServers() {
