@@ -99,12 +99,43 @@ sudo ufw allow 25566:26565/udp && sudo ufw allow 25566:26565/tcp
 - `NEXT_PUBLIC_SERVER_HOST` (frontend) = host affiché pour la connexion directe (défaut
   `24.157.140.226`).
 
-## Backlog en cours (demandé le 2026-06-10, à traiter)
+## Fait (2026-06-10/11)
 
-1. **Dashboard par jeu** : un dashboard similaire mais adapté par jeu.
-2. Mettre à jour les chiffres sur `/games/satisfactory`.
-3. Rust & ARK : activer « être prévenu » + **ping serveur** sur la page avant achat.
-4. Ce fichier de résumé ✅ + (proposé) skill « playrena » d'auto-contexte.
-5. Adapter `/admin` (mcserver-monitor) aux dernières fonctionnalités + en proposer.
-6. Section site pour les **mods Hytale** (en cours de création par Simon).
-7. Baisser les prix Minecraft (catchy) — ⚠️ `PLANS` est partagé entre tous les jeux.
+- ✅ Dashboard par jeu (hub `/dashboard` + `/dashboard/[game]`, accent par jeu).
+- ✅ Chiffres `/games/satisfactory` & `/games/hytale` : plancher 4 Go affiché.
+- ✅ Rust & ARK : pages « être prévenu » (`/games/rust`, `/games/ark`) + composant `ComingSoonGame`.
+- ✅ Ping de latence sur les pages d'achat (composant `PingBadge`). ⚠️ voir backlog #B.
+- ✅ `PLAYRENA.md` + skill `~/.claude/skills/playrena/`.
+- ✅ `/admin` enrichi : vue Serveurs (DB), start/restart, compteurs/filtre par jeu, business. ⚠️ **image build, container à redéployer (cmd dans le résumé de session)**.
+- ✅ Page `/mods` placeholder « bientôt » + lien depuis `/games/hytale`.
+- ✅ Prix baissés (grille `PLANS` partagée) : Starter 2$/3$, Standard 5$/6$, Pro 9$/12$, Extreme 16$/22$.
+- ✅ Robustesse Hytale (parsing OAuth tolérant + logs bruts) ; port TCP Satisfactory ajouté.
+
+## Backlog à traiter (demandé le 2026-06-11)
+
+- **#A — `mcserver-monitor` à REDÉPLOYER** (manuel, sudo non requis mais secret DB) :
+  build déjà fait ; recréer le container avec ses env/réseaux (cmd fournie en session).
+- **#B — Latence du ping trop élevée** : `PingBadge` mesure le RTT vers le endpoint web
+  (via Cloudflare) → valeur gonflée. Pour une vraie latence vers le node de jeu, exposer
+  un petit endpoint sur un DNS **non-proxifié** (grey-cloud) pointant l'IP d'origine, ou
+  retirer/atténuer le badge. (Fichier : `frontend/components/ping-badge.tsx`.)
+- **#C — `/admin` : « faire pour les commandes »** : à clarifier — probablement appliquer
+  la même robustesse / les actions aux commandes admin.
+- **#D — SGPortfolio : nettoyer les releases GitHub** non nommées `v0.*`
+  (`gh release list` / `gh release delete` dans le repo SGPortfolio).
+- **#E — Nouveau site « services de création de site web propulsés par IA »**, accessible
+  depuis le portfolio, **contact par courriel** (réutiliser `internal/mailer` / SGMail).
+  Gros chantier : décider repo (SGPortfolio ? nouveau ?), routing nginx, design, formulaire.
+
+## ⚠️ Blocage connu : connectivité des serveurs UDP (Satisfactory/Hytale)
+
+Le container Satisfactory **fonctionne** (jeu démarré, ports bindés sur l'hôte), mais les
+joueurs ne peuvent pas se connecter tant que le **pare-feu UDP n'est pas ouvert** (le MC
+marche car seul le **TCP** 25565 a été ouvert). Action utilisateur (sudo, node1 **et** node2)
+**+ NAT routeur** pour la plage de jeu :
+
+```bash
+sudo ufw allow 25566:26565/udp
+sudo ufw allow 25566:26565/tcp
+```
+C'est le prérequis qui débloque réellement Satisfactory et la connexion Hytale.
