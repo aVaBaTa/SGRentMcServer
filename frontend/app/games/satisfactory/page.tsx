@@ -5,7 +5,9 @@ import { Check, Factory } from "lucide-react";
 import {
   useI18n, PLANS, PERIODS, priceFor, fmtMoney, currencyCode, type Period,
 } from "@/lib/i18n";
+import { getGame } from "@/lib/games";
 import { SiteNav, SiteFooter } from "@/components/site-chrome";
+import { PingBadge } from "@/components/ping-badge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -24,6 +26,7 @@ const jsonLd = {
 export default function SatisfactoryHosting() {
   const { t, lang } = useI18n();
   const [period, setPeriod] = useState<Period>("monthly");
+  const floor = getGame("satisfactory")?.minRamGb ?? 0;
 
   return (
     <main className="flex flex-col min-h-screen">
@@ -66,13 +69,18 @@ export default function SatisfactoryHosting() {
               {t.hero.ctaPlans}
             </a>
           </div>
+
+          <PingBadge className="mt-2" />
         </div>
       </section>
 
       {/* Plans (partagés) */}
       <section id="plans" className="px-6 pb-32 max-w-6xl mx-auto w-full">
         <h2 className="text-3xl font-bold text-center mb-2">{t.pricing.heading}</h2>
-        <p className="text-zinc-500 text-center mb-8">{t.pricing.sub}</p>
+        <p className="text-zinc-500 text-center mb-2">{t.pricing.sub}</p>
+        {floor > 0 && (
+          <p className="text-amber-400/90 text-sm text-center mb-8">{t.pricing.minIncluded.replace("{n}", String(floor))}</p>
+        )}
 
         {/* Toggle période */}
         <div className="flex justify-center mb-10">
@@ -132,7 +140,7 @@ export default function SatisfactoryHosting() {
                   )}
                 </div>
                 <ul className="text-sm text-zinc-400 flex flex-col gap-1.5 mt-1">
-                  <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-amber-400" /> {plan.ram} {t.pricing.ramLabel}</li>
+                  <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-amber-400" /> {Math.max(parseInt(plan.ram), floor)} GB {t.pricing.ramLabel}</li>
                   <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-amber-400" /> {plan.cpu} {plan.cpu > 1 ? "cœurs" : "cœur"}</li>
                   <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-amber-400" /> {plan.slots === 0 ? t.pricing.unlimited : `${plan.slots} ${t.pricing.players}`}</li>
                 </ul>

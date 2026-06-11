@@ -6,14 +6,15 @@ export interface Game {
   href: string; // "#" si pas de page dédiée
   status: GameStatus;
   accent: string; // dégradé Tailwind
+  minRamGb?: number; // plancher RAM imposé au provisioning (reflète le backend)
 }
 
 export const GAMES: Game[] = [
   { id: "minecraft", name: "Minecraft", href: "/games/minecraft", status: "live", accent: "from-green-500 to-emerald-600" },
-  { id: "hytale", name: "Hytale", href: "/games/hytale", status: "live", accent: "from-blue-500 to-indigo-600" },
-  { id: "rust", name: "Rust", href: "#", status: "soon", accent: "from-red-500 to-orange-600" },
-  { id: "satisfactory", name: "Satisfactory", href: "/games/satisfactory", status: "live", accent: "from-orange-500 to-amber-600" },
-  { id: "ark", name: "ARK: Survival", href: "#", status: "soon", accent: "from-fuchsia-500 to-purple-600" },
+  { id: "hytale", name: "Hytale", href: "/games/hytale", status: "live", accent: "from-blue-500 to-indigo-600", minRamGb: 4 },
+  { id: "rust", name: "Rust", href: "/games/rust", status: "soon", accent: "from-red-500 to-orange-600" },
+  { id: "satisfactory", name: "Satisfactory", href: "/games/satisfactory", status: "live", accent: "from-orange-500 to-amber-600", minRamGb: 4 },
+  { id: "ark", name: "ARK: Survival", href: "/games/ark", status: "soon", accent: "from-fuchsia-500 to-purple-600" },
 ];
 
 export function getGame(id: string): Game | undefined {

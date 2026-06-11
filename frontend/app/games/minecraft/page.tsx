@@ -9,6 +9,7 @@ import {
   useI18n, PLANS, PERIODS, priceFor, fmtMoney, currencyCode, type Period,
 } from "@/lib/i18n";
 import { SiteNav, SiteFooter } from "@/components/site-chrome";
+import { PingBadge } from "@/components/ping-badge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -118,6 +119,8 @@ export default function MinecraftHosting() {
                 {t.hero.ctaPlans}
               </a>
             </div>
+
+            <PingBadge />
 
             {/* Badges */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 mt-2">
