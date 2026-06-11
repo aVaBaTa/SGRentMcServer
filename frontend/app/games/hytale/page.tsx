@@ -70,6 +70,10 @@ export default function HytaleHosting() {
             </a>
           </div>
 
+          <a href="/mods" className="text-sm text-indigo-300 hover:text-indigo-200 underline underline-offset-4 transition-colors">
+            {t.mods.title1} {t.mods.title2} →
+          </a>
+
           <PingBadge className="mt-2" />
 
           {/* Note d'autorisation (1er démarrage) */}

@@ -133,6 +133,20 @@ const fr = {
     back: "← Tous les jeux",
     note: "Aucun spam — juste un message quand c'est prêt.",
   },
+  mods: {
+    badge: "En création",
+    title1: "Mods",
+    title2: "Hytale",
+    subtitle: "Je développe des mods Hytale maison. Ils arriveront bientôt ici — pensés pour s'installer en un clic sur ton serveur Playrena.",
+    bullets: [
+      "Mods originaux, faits par le studio Playrena",
+      "Installation depuis le panel (à venir)",
+      "Compatibles avec nos serveurs Hytale",
+    ],
+    cta: "Être prévenu (Discord)",
+    back: "← Accueil",
+    note: "Suis le Discord pour voir l'avancement et tester en avant-première.",
+  },
   gameTag: {
     minecraft: "Paper, Fabric, Forge — gratuit pour commencer.",
     hytale: "Le prochain grand bac à sable. Prépare-toi avec Playrena.",
@@ -415,6 +429,20 @@ const en: Dict = {
     cta: "Notify me at launch",
     back: "← All games",
     note: "No spam — just one message when it's ready.",
+  },
+  mods: {
+    badge: "In the making",
+    title1: "Hytale",
+    title2: "Mods",
+    subtitle: "I'm building my own Hytale mods. They'll land here soon — designed to install in one click on your Playrena server.",
+    bullets: [
+      "Original mods, made by Playrena studio",
+      "Install from the panel (coming)",
+      "Compatible with our Hytale servers",
+    ],
+    cta: "Get notified (Discord)",
+    back: "← Home",
+    note: "Follow the Discord to see progress and get early access.",
   },
   gameTag: {
     minecraft: "Paper, Fabric, Forge — free to start.",
