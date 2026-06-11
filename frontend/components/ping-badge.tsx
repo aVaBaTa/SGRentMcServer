@@ -4,16 +4,22 @@ import { useEffect, useState } from "react";
 import { Wifi } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
-// Cible mesurée : un petit asset statique servi DEPUIS LE CACHE EDGE Cloudflare.
-// Le navigateur ne peut pas faire de vrai ICMP ping vers l'IP de jeu ; on mesure
-// le RTT HTTP (best-of-N) comme approximation de la proximité réseau.
+// Endpoint de ping dédié, servi DEPUIS LE CACHE EDGE Cloudflare en HIT (#B) :
+// nginx renvoie `/ping.ico` instantanément (pas d'upstream), avec des en-têtes
+// `immutable` + extension `.ico` => Cloudflare le garde en cache et répond sans
+// jamais toucher l'origine. On mesure donc le pur RTT navigateur<->edge (proximité
+// réseau), pas un aller-retour gonflé vers l'origine.
 //
-// IMPORTANT (backlog #B) : on NE met PAS de query de cache-busting. Avec un
-// cache-buster, Cloudflare contourne son cache edge et fait un aller-retour complet
-// Full-Strict jusqu'à l'origine → valeur gonflée et non représentative. Sans
-// cache-buster, l'edge répond depuis son cache → on mesure browser↔edge, honnête.
-// `cache: "no-store"` ne sert qu'à bypasser le cache LOCAL du navigateur (sinon RTT ≈ 0).
-const TARGET = "https://mcserver.vbt-prog.com/favicon.ico";
+// Chemin RELATIF => suit le domaine courant (playrena.vbt-prog.com ou l'ancien
+// mcserver.vbt-prog.com), même origine (zéro CORS).
+// `cache: "no-store"` ne bypasse que le cache LOCAL du navigateur (sinon RTT ≈ 0) ;
+// l'edge Cloudflare répond quand même en HIT à chaque requête.
+//
+// NB: un vrai ping ICMP vers le node de jeu est impossible côté navigateur — c'est
+// une approximation de proximité réseau, d'où le préfixe « ~ » à l'affichage.
+const TARGET = "/ping.ico";
+const WARMUP = 1; // 1re requête écartée (DNS + TLS + 1er remplissage cache)
+const SAMPLES = 5; // on garde le min des échantillons « à chaud »
 
 export function PingBadge({ className = "" }: { className?: string }) {
   const { t } = useI18n();
@@ -21,19 +27,25 @@ export function PingBadge({ className = "" }: { className?: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    const ping = async () => {
+      const start = performance.now();
+      try {
+        await fetch(TARGET, { mode: "no-cors", cache: "no-store" });
+      } catch { /* opaque (no-cors), le timing reste valable */ }
+      return performance.now() - start;
+    };
     (async () => {
-      const samples: number[] = [];
-      for (let i = 0; i < 4; i++) {
-        const start = performance.now();
-        try {
-          await fetch(TARGET, { mode: "no-cors", cache: "no-store" });
-        } catch { /* opaque (no-cors), le timing reste valable */ }
+      for (let i = 0; i < WARMUP; i++) {
+        await ping();
         if (cancelled) return;
-        samples.push(performance.now() - start);
       }
-      // On ignore le 1er échantillon (DNS+TLS) si possible, puis on prend le min.
-      const considered = samples.length > 1 ? samples.slice(1) : samples;
-      if (!cancelled) setMs(Math.round(Math.min(...considered)));
+      const samples: number[] = [];
+      for (let i = 0; i < SAMPLES; i++) {
+        const d = await ping();
+        if (cancelled) return;
+        samples.push(d);
+      }
+      if (!cancelled && samples.length) setMs(Math.round(Math.min(...samples)));
     })();
     return () => { cancelled = true; };
   }, []);

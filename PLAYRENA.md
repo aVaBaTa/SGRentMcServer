@@ -93,7 +93,7 @@ sudo ufw allow 25566:26565/udp && sudo ufw allow 25566:26565/tcp
 
 ## Pièges / règles
 
-- **Jamais valider en localhost** ; toujours via `https://mcserver.vbt-prog.com`.
+- **Jamais valider en localhost** ; toujours via le domaine public **`https://playrena.vbt-prog.com`** (ex-`mcserver.vbt-prog.com`, encore actif en parallèle).
 - Secrets **jamais commités** : `.env`, `CREDENTIALS.md.save`, `.mailpw*`, tokens Discord.
 - Frontend = Next.js modifié → lire `frontend/AGENTS.md` avant d'y coder.
 - `NEXT_PUBLIC_SERVER_HOST` (frontend) = host affiché pour la connexion directe (défaut
@@ -104,25 +104,49 @@ sudo ufw allow 25566:26565/udp && sudo ufw allow 25566:26565/tcp
 - ✅ Dashboard par jeu (hub `/dashboard` + `/dashboard/[game]`, accent par jeu).
 - ✅ Chiffres `/games/satisfactory` & `/games/hytale` : plancher 4 Go affiché.
 - ✅ Rust & ARK : pages « être prévenu » (`/games/rust`, `/games/ark`) + composant `ComingSoonGame`.
-- ✅ Ping de latence sur les pages d'achat (composant `PingBadge`). ✅ #B corrigé : retrait du cache-busting → mesure browser↔edge Cloudflare (plus d'aller-retour origine gonflé) + préfixe `~` pour l'aspect approximatif. **À redéployer (frontend).**
+- ✅ Ping de latence sur les pages d'achat (composant `PingBadge`). ✅ #B corrigé **et déployé** : endpoint nginx `= /ping.ico` (réponse instantanée + `immutable` → Cloudflare sert en **HIT**, vérifié), badge pointé dessus en relatif (suit le domaine courant), warm-up + min sur 5 échantillons, préfixe `~`.
 - ✅ `PLAYRENA.md` + skill `~/.claude/skills/playrena/`.
 - ✅ `/admin` enrichi : vue Serveurs (DB), start/restart, compteurs/filtre par jeu, business. ⚠️ **image build, container à redéployer (cmd dans le résumé de session)**.
 - ✅ Page `/mods` placeholder « bientôt » + lien depuis `/games/hytale`.
 - ✅ Prix baissés (grille `PLANS` partagée) : Starter 2$/3$, Standard 5$/6$, Pro 9$/12$, Extreme 16$/22$.
 - ✅ Robustesse Hytale (parsing OAuth tolérant + logs bruts) ; port TCP Satisfactory ajouté.
 
+## 🔄 IMPORTANT — Rebrand domaine `mcserver` → `playrena` (en cours, 2026-06-11)
+
+Le panel migre du sous-domaine `mcserver.vbt-prog.com` vers **`playrena.vbt-prog.com`** (Option 1 : sous-domaine de vbt-prog.com, pas de domaine propre pour l'instant). Migration **sans coupure** : les deux domaines servent le même site en parallèle.
+
+**Fait :**
+- DNS Cloudflare : A `playrena.vbt-prog.com` → 24.157.140.226 (proxied), live.
+- nginx (`SGPortfolio/docker/nginx/nginx.conf`) : `server_name playrena.vbt-prog.com mcserver.vbt-prog.com` (même bloc 443, sert les deux).
+
+**À FINALISER (bloqué tant que la Redirect URI Discord n'est pas ajoutée) :**
+1. ⚠️ ACTION UTILISATEUR : ajouter la Redirect URI `https://playrena.vbt-prog.com/auth/discord/callback` dans l'app Discord (portail dev, app `1513764241784705034`) — **non automatisable** (l'API bot ignore `redirect_uris`). Garder l'ancienne.
+2. `DISCORD_REDIRECT_URL` → playrena (`docker-compose.yml` + défaut `internal/config/config.go`) → rebuild `mcserver-api`.
+3. URLs SEO frontend → playrena : `layout.tsx` (metadataBase/OG/canonical), `sitemap.ts`, `robots.ts`, `blog/page.tsx` + `[slug]`, `components/ping-badge.tsx` → rebuild `mcserver-frontend`.
+4. Lien header portfolio `SGPortfolio/src/components/Header.tsx` → playrena → rebuild `portfolio`.
+5. Basculer `mcserver.vbt-prog.com` en **301** vers playrena (garde backlinks/SEO ; cf. `BACKLINKS.md`).
+6. Google Search Console : nouvelle propriété + sitemap.
+
+**On garde tel quel (interne, invisible du public) :** repo `SGRentMcServer`, module Go `github.com/aVaBaTa/SGRentMcServer`, conteneurs/images `mcserver-*`, et le mail `contact@mcserver.vbt-prog.com`.
+
 ## Backlog à traiter (demandé le 2026-06-11)
 
 - **#A — `mcserver-monitor` à REDÉPLOYER** (manuel, sudo non requis mais secret DB) :
   build déjà fait ; recréer le container avec ses env/réseaux (cmd fournie en session).
-- ✅ **#B — Latence du ping trop élevée** — CORRIGÉ (2026-06-11, à redéployer frontend) :
-  le cache-busting forçait un aller-retour Full-Strict vers l'origine (valeur gonflée).
-  Retiré → l'edge Cloudflare répond depuis son cache, on mesure browser↔edge (proximité
-  réseau honnête) ; `cache:"no-store"` ne bypasse plus que le cache local du navigateur ;
-  préfixe `~` ajouté pour signaler l'approximation. (Fichier : `frontend/components/ping-badge.tsx`.)
+- ✅ **#B — Latence du ping trop élevée** — CORRIGÉ ET DÉPLOYÉ (2026-06-11) :
+  1) **nginx** (`SGPortfolio/docker/nginx/nginx.conf`, bloc playrena) : nouvelle `location =
+     /ping.ico` qui renvoie un 200 vide **instantanément** (aucun upstream) avec
+     `Cache-Control: public, max-age=31536000, immutable` + CORS + extension `.ico` →
+     Cloudflare la met en cache et répond en **HIT** (vérifié : MISS puis HIT sur playrena
+     ET mcserver). Plus aucune revalidation vers l'origine.
+  2) **frontend** (`frontend/components/ping-badge.tsx`) : cible relative `/ping.ico` (suit le
+     domaine courant, même origine), 1 warm-up (DNS+TLS écartés) puis **min sur 5 échantillons**
+     à chaud, préfixe `~`. Mesure désormais le **pur RTT navigateur↔edge** (proximité réseau).
   NB : une **vraie** latence ICMP vers le node de jeu reste impossible côté navigateur — le
   seul cert présent est l'Origin CA Cloudflare (non reconnu par les navigateurs), donc un
   endpoint grey-cloud nécessiterait un cert publiquement valide (Let's Encrypt) dédié.
+  Leviers de **vraie** latence joueur (hors badge) : SQM/anti-bufferbloat sur le routeur,
+  filaire côté serveur, et multi-région / Cloudflare Spectrum pour les joueurs distants.
 - **#C — `/admin` : « faire pour les commandes »** : à clarifier — probablement appliquer
   la même robustesse / les actions aux commandes admin.
 - **#D — SGPortfolio : nettoyer les releases GitHub** non nommées `v0.*`
