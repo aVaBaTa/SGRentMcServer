@@ -16,7 +16,7 @@ export async function generateMetadata({
   const { slug } = await params;
   const post = getPost(slug);
   if (!post) return {};
-  const url = `https://mcserver.vbt-prog.com/blog/${post.slug}`;
+  const url = `https://playrena.vbt-prog.com/blog/${post.slug}`;
   return {
     title: `${post.title} | Playrena`,
     description: post.description,

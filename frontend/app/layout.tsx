@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://mcserver.vbt-prog.com"),
+  metadataBase: new URL("https://playrena.vbt-prog.com"),
   title: "Playrena — Hébergement de serveurs Minecraft gratuit",
   description:
     "Crée et héberge ton serveur Minecraft gratuitement en 30 secondes. Paper, mods, console, gestion des joueurs. Serveurs performants au Québec.",
@@ -34,12 +34,12 @@ export const metadata: Metadata = {
     title: "Playrena — Ton serveur Minecraft gratuit en 30 secondes",
     description:
       "Hébergement de serveurs Minecraft performants. Gratuit pour commencer, mods inclus.",
-    url: "https://mcserver.vbt-prog.com",
+    url: "https://playrena.vbt-prog.com",
     siteName: "Playrena",
     locale: "fr_CA",
     type: "website",
   },
-  alternates: { canonical: "https://mcserver.vbt-prog.com" },
+  alternates: { canonical: "https://playrena.vbt-prog.com" },
 };
 
 export default function RootLayout({

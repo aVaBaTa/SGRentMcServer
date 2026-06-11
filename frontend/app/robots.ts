@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: ["/dashboard", "/admin"],
     },
-    sitemap: "https://mcserver.vbt-prog.com/sitemap.xml",
+    sitemap: "https://playrena.vbt-prog.com/sitemap.xml",
   };
 }

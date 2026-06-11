@@ -11,7 +11,7 @@ import { useI18n } from "@/lib/i18n";
 // réseau), pas un aller-retour gonflé vers l'origine.
 //
 // Chemin RELATIF => suit le domaine courant (playrena.vbt-prog.com ou l'ancien
-// mcserver.vbt-prog.com), même origine (zéro CORS).
+// playrena.vbt-prog.com), même origine (zéro CORS).
 // `cache: "no-store"` ne bypasse que le cache LOCAL du navigateur (sinon RTT ≈ 0) ;
 // l'edge Cloudflare répond quand même en HIT à chaque requête.
 //

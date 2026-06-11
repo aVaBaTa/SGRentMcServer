@@ -111,23 +111,21 @@ sudo ufw allow 25566:26565/udp && sudo ufw allow 25566:26565/tcp
 - ✅ Prix baissés (grille `PLANS` partagée) : Starter 2$/3$, Standard 5$/6$, Pro 9$/12$, Extreme 16$/22$.
 - ✅ Robustesse Hytale (parsing OAuth tolérant + logs bruts) ; port TCP Satisfactory ajouté.
 
-## 🔄 IMPORTANT — Rebrand domaine `mcserver` → `playrena` (en cours, 2026-06-11)
+## ✅ Rebrand domaine `mcserver` → `playrena` — FAIT (2026-06-11)
 
-Le panel migre du sous-domaine `mcserver.vbt-prog.com` vers **`playrena.vbt-prog.com`** (Option 1 : sous-domaine de vbt-prog.com, pas de domaine propre pour l'instant). Migration **sans coupure** : les deux domaines servent le même site en parallèle.
+Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de vbt-prog.com). Bascule sans coupure.
 
-**Fait :**
-- DNS Cloudflare : A `playrena.vbt-prog.com` → 24.157.140.226 (proxied), live.
-- nginx (`SGPortfolio/docker/nginx/nginx.conf`) : `server_name playrena.vbt-prog.com mcserver.vbt-prog.com` (même bloc 443, sert les deux).
+**Fait et déployé :**
+- DNS Cloudflare : A `playrena.vbt-prog.com` → 24.157.140.226 (proxied).
+- nginx : bloc 443 `playrena.vbt-prog.com` (principal) + bloc `mcserver.vbt-prog.com` → **301** vers playrena (préserve backlinks/SEO).
+- Discord : Redirect URI = `https://playrena.vbt-prog.com/auth/discord/callback` (app `1513764241784705034`) ; `DISCORD_REDIRECT_URL` (compose) basculé → `mcserver-api` rebuild.
+- Frontend SEO → playrena (`layout.tsx` metadataBase/OG/canonical, `sitemap.ts`, `robots.ts`, `blog`) → `mcserver-frontend` rebuild.
+- Lien header portfolio (`SGPortfolio/src/components/Header.tsx`) → playrena → `portfolio` rebuild.
+- Vérifié live : 301 mcserver→playrena, login Discord OK, sitemap/robots/portfolio en playrena.
 
-**À FINALISER (bloqué tant que la Redirect URI Discord n'est pas ajoutée) :**
-1. ⚠️ ACTION UTILISATEUR : ajouter la Redirect URI `https://playrena.vbt-prog.com/auth/discord/callback` dans l'app Discord (portail dev, app `1513764241784705034`) — **non automatisable** (l'API bot ignore `redirect_uris`). Garder l'ancienne.
-2. `DISCORD_REDIRECT_URL` → playrena (`docker-compose.yml` + défaut `internal/config/config.go`) → rebuild `mcserver-api`.
-3. URLs SEO frontend → playrena : `layout.tsx` (metadataBase/OG/canonical), `sitemap.ts`, `robots.ts`, `blog/page.tsx` + `[slug]`, `components/ping-badge.tsx` → rebuild `mcserver-frontend`.
-4. Lien header portfolio `SGPortfolio/src/components/Header.tsx` → playrena → rebuild `portfolio`.
-5. Basculer `mcserver.vbt-prog.com` en **301** vers playrena (garde backlinks/SEO ; cf. `BACKLINKS.md`).
-6. Google Search Console : nouvelle propriété + sitemap.
+**Reste (manuel, non bloquant) :** Google Search Console (nouvelle propriété + sitemap) ; mettre à jour `BACKLINKS.md` pour les futures inscriptions.
 
-**On garde tel quel (interne, invisible du public) :** repo `SGRentMcServer`, module Go `github.com/aVaBaTa/SGRentMcServer`, conteneurs/images `mcserver-*`, et le mail `contact@mcserver.vbt-prog.com`.
+**Gardé tel quel (interne, invisible du public) :** repo `SGRentMcServer`, module Go `github.com/aVaBaTa/SGRentMcServer`, conteneurs/images `mcserver-*`, mail `contact@mcserver.vbt-prog.com`. Domaine propre (`playrena.com`/`.gg`) = plus tard.
 
 ## Backlog à traiter (demandé le 2026-06-11)
 

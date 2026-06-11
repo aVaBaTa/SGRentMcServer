@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: "Blog — Guides Minecraft | Playrena",
   description:
     "Guides et tutoriels pour créer, héberger et optimiser ton serveur Minecraft : mods, versions, performances et plus.",
-  alternates: { canonical: "https://mcserver.vbt-prog.com/blog" },
+  alternates: { canonical: "https://playrena.vbt-prog.com/blog" },
 };
 
 export default function BlogIndex() {

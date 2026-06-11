@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { posts } from "./blog/posts";
 
-const BASE = "https://mcserver.vbt-prog.com";
+const BASE = "https://playrena.vbt-prog.com";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const staticPages: MetadataRoute.Sitemap = [
