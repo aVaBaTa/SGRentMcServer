@@ -152,7 +152,7 @@ export default function ServerPage() {
   }
 
   // Authentification interactive (Hytale) : poll de l'URL+code OAuth
-  const [authInfo, setAuthInfo] = useState<{ pending: boolean; step?: number; url?: string; code?: string } | null>(null);
+  const [authInfo, setAuthInfo] = useState<{ pending: boolean; step?: number; url?: string; code?: string; raw?: string[] } | null>(null);
   const authRequired = server?.status === "auth_required";
   useEffect(() => {
     if (!authRequired) { setAuthInfo(null); return; }
@@ -468,6 +468,13 @@ export default function ServerPage() {
                 )}
               </div>
             ) : null}
+            {authInfo?.raw && authInfo.raw.length > 0 && (
+              <div>
+                <div className="text-xs text-zinc-500 mb-1">{t.srv.authRaw}</div>
+                <pre className="max-h-40 overflow-auto bg-black/50 rounded-lg p-3 text-[11px] font-mono text-amber-200/90 whitespace-pre-wrap break-words">{authInfo.raw.join("\n")}</pre>
+                <p className="text-xs text-zinc-500 mt-2">{t.srv.authManual}</p>
+              </div>
+            )}
             <p className="text-xs text-zinc-500">{t.srv.authWaiting}</p>
           </div>
         )}

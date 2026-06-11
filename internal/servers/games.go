@@ -83,11 +83,12 @@ var games = map[string]GameDef{
 		MinRAMMb:     4096,  // minimum jouable (offert gratuitement pour l'instant)
 		MinCPUCores:  2.0,
 		Ports: func(base int) []PortMapping {
-			// Patch 1.1 : deux ports distincts requis, redirection non supportée
-			// pour le port de jeu → on configure le container pour écouter
-			// exactement sur les ports alloués (hôte == interne).
+			// Patch 1.1 : le port de jeu (base) écoute en UDP (trafic de jeu) ET
+			// TCP (API/HTTPS), la redirection n'est pas supportée → hôte == interne.
+			// Le reliable messaging est sur un 2e port TCP distinct (base+offset).
 			return []PortMapping{
 				{HostPort: base, Internal: base, Proto: "udp"},                                                 // jeu (-Port)
+				{HostPort: base, Internal: base, Proto: "tcp"},                                                 // API/HTTPS du jeu
 				{HostPort: base + satisfactoryMsgOffset, Internal: base + satisfactoryMsgOffset, Proto: "tcp"}, // reliable messaging (-ReliablePort)
 			}
 		},

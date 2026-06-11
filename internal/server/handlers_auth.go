@@ -12,64 +12,96 @@ import (
 	"github.com/aVaBaTa/SGRentMcServer/internal/servers"
 )
 
-// Format des logs de l'image ghcr.io/terkea/hytale-server (OAuth device-code).
-// Les deux étapes (téléchargeur puis serveur) impriment l'URL de vérification
-// Hytale ; le code utilisateur est porté par le paramètre user_code.
-//
-//	Please visit the following URL to authenticate:
-//	https://oauth.accounts.hytale.com/oauth2/device/verify?user_code=XXXX
-//	...
-//	  SERVER AUTHENTICATION REQUIRED
-//	  Visit: https://oauth.accounts.hytale.com/oauth2/device/verify?user_code=YYYY
-//	  Code:  YYYY
-var hytaleVerifyRe = regexp.MustCompile(`https://oauth\.accounts\.hytale\.com/oauth2/device/verify\?user_code=([A-Za-z0-9_-]+)`)
-
-// Marqueurs de fin d'authentification (le serveur démarre réellement ensuite).
-var hytaleAuthDoneRe = regexp.MustCompile(`(?i)authenticated and ready|server oauth authorized`)
+// Parsing tolérant des logs d'auth OAuth (image Hytale type ghcr.io/terkea).
+// On ne dépend pas d'un format exact : on cherche une URL de vérification, un
+// code, et des marqueurs de fin — avec repli sur les lignes brutes pertinentes
+// affichées à l'utilisateur s'il faut faire l'auth à la main.
+var (
+	anyURLRe        = regexp.MustCompile(`https?://[^\s"'<>]+`)
+	userCodeParamRe = regexp.MustCompile(`(?i)user_code=([A-Za-z0-9-]+)`)
+	codeLineRe      = regexp.MustCompile(`(?i)\b(?:user[_ ]?code|code)\b\s*[:=]?\s*([A-Z0-9][A-Z0-9-]{3,})`)
+	authReadyRe     = regexp.MustCompile(`(?i)(authenticated and ready|server oauth authorized|server (?:is )?(?:started|ready|listening)|ready for connections|world (?:loaded|ready)|listening on)`)
+	authHintRe      = regexp.MustCompile(`(?i)(verify|device|oauth|authenticate|authoriz|user_code|sign in|enter the code)`)
+	authErrRe       = regexp.MustCompile(`(?i)(authentication failed|oauth (?:error|failed)|download failed|fatal|panic:)`)
+)
 
 type authStatus struct {
-	Pending bool   `json:"pending"`        // true tant qu'une autorisation est attendue
-	Step    int    `json:"step,omitempty"` // 1 = téléchargeur, 2 = serveur
-	URL     string `json:"url,omitempty"`  // URL de vérification à visiter
-	Code    string `json:"code,omitempty"` // code à entrer
+	Pending bool     `json:"pending"`        // une autorisation est attendue
+	Step    int      `json:"step,omitempty"` // 1 = téléchargeur, 2 = serveur
+	URL     string   `json:"url,omitempty"`  // URL de vérification à visiter
+	Code    string   `json:"code,omitempty"` // code à entrer
+	Raw     []string `json:"raw,omitempty"`  // lignes de log pertinentes (repli manuel)
 }
 
-// parseAuthFromLogs extrait le dernier prompt OAuth d'un bloc de logs.
-// done=true si l'authentification est terminée (plus rien à faire).
+// relevantAuthLines garde les dernières lignes mentionnant auth / URL / code.
+func relevantAuthLines(logs string) []string {
+	var out []string
+	for _, ln := range strings.Split(logs, "\n") {
+		t := strings.TrimSpace(ln)
+		if t == "" {
+			continue
+		}
+		if authHintRe.MatchString(t) || strings.Contains(t, "http") || codeLineRe.MatchString(t) {
+			out = append(out, t)
+		}
+	}
+	if len(out) > 12 {
+		out = out[len(out)-12:]
+	}
+	return out
+}
+
+// parseAuthFromLogs extrait l'état d'auth d'un bloc de logs.
+// done=true si le serveur est authentifié/prêt (plus rien à faire).
 func parseAuthFromLogs(logs string) (st authStatus, done bool) {
-	if hytaleAuthDoneRe.MatchString(logs) {
+	if authReadyRe.MatchString(logs) {
 		return authStatus{Pending: false}, true
 	}
-	idxs := hytaleVerifyRe.FindAllStringSubmatchIndex(logs, -1)
-	if len(idxs) == 0 {
-		return authStatus{Pending: false}, false
+
+	var url, code string
+	for _, u := range anyURLRe.FindAllString(logs, -1) {
+		lu := strings.ToLower(u)
+		if strings.Contains(lu, "hytale") || strings.Contains(lu, "oauth") ||
+			strings.Contains(lu, "device") || strings.Contains(lu, "verify") {
+			url = strings.TrimRight(u, `.,)]}"'`)
+			if m := userCodeParamRe.FindStringSubmatch(u); m != nil {
+				code = m[1]
+			}
+		}
 	}
-	last := idxs[len(idxs)-1]
+	if code == "" {
+		if m := codeLineRe.FindStringSubmatch(logs); m != nil {
+			code = m[1]
+		}
+	}
+
+	raw := relevantAuthLines(logs)
 	st = authStatus{
-		Pending: true,
-		URL:     logs[last[0]:last[1]],
-		Code:    logs[last[2]:last[3]],
-		Step:    1,
+		Pending: url != "" || code != "",
+		URL:     url,
+		Code:    code,
+		Raw:     raw,
 	}
-	// L'étape "serveur" est précédée de la bannière SERVER AUTHENTICATION REQUIRED.
-	if strings.Contains(logs[:last[0]], "SERVER AUTHENTICATION REQUIRED") {
+	if strings.Contains(logs, "SERVER AUTHENTICATION REQUIRED") {
 		st.Step = 2
+	} else if st.Pending {
+		st.Step = 1
 	}
 	return st, false
 }
 
-// watchAuthAndRun surveille les logs d'un serveur à authentification interactive
-// (Hytale) après son démarrage : passe le statut à "auth_required" dès qu'un
-// prompt OAuth apparaît, puis à "running" une fois l'authentification complétée.
-// Détaché du contexte de provisioning (l'utilisateur a besoin de temps).
+// watchAuthAndRun surveille un serveur à authentification interactive (Hytale)
+// après son démarrage. Robuste : passe vite en "auth_required" (pour que le
+// panel et les logs soient visibles), détecte la fin d'auth → "running", et
+// l'arrêt/échec du container → "error". Ne reste jamais bloqué en "creating".
 func (s *Server) watchAuthAndRun(gs *servers.GameServer, node *orchestrator.Node) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
 	defer cancel()
 
 	ticker := time.NewTicker(4 * time.Second)
 	defer ticker.Stop()
 
-	announcedAuth := false
+	announced := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -78,34 +110,47 @@ func (s *Server) watchAuthAndRun(gs *servers.GameServer, node *orchestrator.Node
 		case <-ticker.C:
 		}
 
-		logs, err := node.Logs(ctx, gs.ContainerID, 400)
+		// Container arrêté/mort (échec du download ou crash) → erreur.
+		if state, err := node.GetContainerStatus(ctx, gs.ContainerID); err == nil {
+			if state == "exited" || state == "dead" {
+				s.serverRepo.UpdateStatus(ctx, gs.ID, "error")
+				slog.Warn("auth watch: container not running", "id", gs.ID, "state", state)
+				return
+			}
+		}
+
+		logs, err := node.Logs(ctx, gs.ContainerID, 1500)
 		if err != nil {
 			continue
 		}
-		st, done := parseAuthFromLogs(logs)
+		_, done := parseAuthFromLogs(logs)
 		if done {
 			s.serverRepo.UpdateStatus(ctx, gs.ID, "running")
-			slog.Info("auth watch: authentication complete, server running", "id", gs.ID)
+			s.registerRoute(ctx, gs)
+			slog.Info("auth watch: server ready, running", "id", gs.ID)
 			return
 		}
-		if st.Pending && !announcedAuth {
-			announcedAuth = true
+		if authErrRe.MatchString(logs) {
+			slog.Warn("auth watch: error marker in logs", "id", gs.ID)
+		}
+		// Jeu à auth : dès qu'il n'est pas "prêt", on expose le statut
+		// auth_required (le panel affiche l'URL/code parsés OU les logs bruts).
+		if !announced {
+			announced = true
 			s.serverRepo.UpdateStatus(ctx, gs.ID, "auth_required")
-			slog.Info("auth watch: interactive authorization required", "id", gs.ID, "step", st.Step)
+			slog.Info("auth watch: awaiting authorization", "id", gs.ID)
 		}
 	}
 }
 
-// handleServerAuth : GET /servers/{id}/auth → état de l'authentification
-// interactive (URL + code à présenter à l'utilisateur). Sans état : relit les
-// logs du container à la demande.
+// handleServerAuth : GET /servers/{id}/auth → état de l'auth interactive
+// (URL + code + logs bruts de secours). Sans état : relit les logs à la demande.
 func (s *Server) handleServerAuth(w http.ResponseWriter, r *http.Request) {
 	gs, node, err := s.resolveServer(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	// Jeu sans auth, ou serveur déjà en ligne : rien à faire.
 	if gs.ContainerID == "" || gs.Status == "running" {
 		respond(w, http.StatusOK, authStatus{Pending: false})
 		return
@@ -114,7 +159,7 @@ func (s *Server) handleServerAuth(w http.ResponseWriter, r *http.Request) {
 		respond(w, http.StatusOK, authStatus{Pending: false})
 		return
 	}
-	logs, err := node.Logs(r.Context(), gs.ContainerID, 400)
+	logs, err := node.Logs(r.Context(), gs.ContainerID, 1500)
 	if err != nil {
 		respond(w, http.StatusOK, authStatus{Pending: false})
 		return
