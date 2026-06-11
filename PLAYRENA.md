@@ -104,7 +104,7 @@ sudo ufw allow 25566:26565/udp && sudo ufw allow 25566:26565/tcp
 - ✅ Dashboard par jeu (hub `/dashboard` + `/dashboard/[game]`, accent par jeu).
 - ✅ Chiffres `/games/satisfactory` & `/games/hytale` : plancher 4 Go affiché.
 - ✅ Rust & ARK : pages « être prévenu » (`/games/rust`, `/games/ark`) + composant `ComingSoonGame`.
-- ✅ Ping de latence sur les pages d'achat (composant `PingBadge`). ⚠️ voir backlog #B.
+- ✅ Ping de latence sur les pages d'achat (composant `PingBadge`). ✅ #B corrigé : retrait du cache-busting → mesure browser↔edge Cloudflare (plus d'aller-retour origine gonflé) + préfixe `~` pour l'aspect approximatif. **À redéployer (frontend).**
 - ✅ `PLAYRENA.md` + skill `~/.claude/skills/playrena/`.
 - ✅ `/admin` enrichi : vue Serveurs (DB), start/restart, compteurs/filtre par jeu, business. ⚠️ **image build, container à redéployer (cmd dans le résumé de session)**.
 - ✅ Page `/mods` placeholder « bientôt » + lien depuis `/games/hytale`.
@@ -115,10 +115,14 @@ sudo ufw allow 25566:26565/udp && sudo ufw allow 25566:26565/tcp
 
 - **#A — `mcserver-monitor` à REDÉPLOYER** (manuel, sudo non requis mais secret DB) :
   build déjà fait ; recréer le container avec ses env/réseaux (cmd fournie en session).
-- **#B — Latence du ping trop élevée** : `PingBadge` mesure le RTT vers le endpoint web
-  (via Cloudflare) → valeur gonflée. Pour une vraie latence vers le node de jeu, exposer
-  un petit endpoint sur un DNS **non-proxifié** (grey-cloud) pointant l'IP d'origine, ou
-  retirer/atténuer le badge. (Fichier : `frontend/components/ping-badge.tsx`.)
+- ✅ **#B — Latence du ping trop élevée** — CORRIGÉ (2026-06-11, à redéployer frontend) :
+  le cache-busting forçait un aller-retour Full-Strict vers l'origine (valeur gonflée).
+  Retiré → l'edge Cloudflare répond depuis son cache, on mesure browser↔edge (proximité
+  réseau honnête) ; `cache:"no-store"` ne bypasse plus que le cache local du navigateur ;
+  préfixe `~` ajouté pour signaler l'approximation. (Fichier : `frontend/components/ping-badge.tsx`.)
+  NB : une **vraie** latence ICMP vers le node de jeu reste impossible côté navigateur — le
+  seul cert présent est l'Origin CA Cloudflare (non reconnu par les navigateurs), donc un
+  endpoint grey-cloud nécessiterait un cert publiquement valide (Let's Encrypt) dédié.
 - **#C — `/admin` : « faire pour les commandes »** : à clarifier — probablement appliquer
   la même robustesse / les actions aux commandes admin.
 - **#D — SGPortfolio : nettoyer les releases GitHub** non nommées `v0.*`
