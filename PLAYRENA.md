@@ -152,6 +152,17 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
 - **#E — Nouveau site « services de création de site web propulsés par IA »**, accessible
   depuis le portfolio, **contact par courriel** (réutiliser `internal/mailer` / SGMail).
   Gros chantier : décider repo (SGPortfolio ? nouveau ?), routing nginx, design, formulaire.
+- **#F — Conversion « douce » Google Ads (inscription / 1ʳᵉ création de serveur)** : en plus
+  de l'achat payant (`/merci`, `AW-18226964787/7YNXCMudhLwcELPSpfND`), envoyer un événement
+  de conversion **secondaire** à la création d'un serveur gratuit (ou au login Discord),
+  **valeur fixe 1,0 CAD** (budget assumé par Simon pour des conversions gratuites). But :
+  donner du signal à Google Ads (sinon ~0 conversion car tout passe par le gratuit).
+  Mettre l'achat en conversion *primaire*, l'inscription en *secondaire*. Code : nouvel
+  événement `gtag('event','conversion', {send_to: <2e libellé Ads>, value:1.0, currency:'CAD'})`
+  déclenché côté frontend après création serveur (ex. dans `dashboard/[game]` ou au retour
+  d'auth Discord). ⚠️ créer d'abord la 2ᵉ action de conversion dans le compte Google Ads.
+  Aussi (lié) : la valeur de la conversion d'achat est codée en dur à 1,0 — pourra refléter
+  le vrai prix du plan plus tard.
 
 ## ⚠️ Blocage connu : connectivité des serveurs UDP (Satisfactory/Hytale)
 
