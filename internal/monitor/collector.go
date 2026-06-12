@@ -206,6 +206,36 @@ func (c *Collector) RestartContainer(ctx context.Context, id string) error {
 	return n.cli.ContainerRestart(ctx, id, container.StopOptions{Timeout: &timeout})
 }
 
+// ContainerLogs retourne les dernières lignes de logs d'un container (stdout+stderr
+// démultiplexés en texte). tail borne le nombre de lignes (1..2000).
+func (c *Collector) ContainerLogs(ctx context.Context, id string, tail int) (string, error) {
+	n := c.findNode(ctx, id)
+	if n == nil {
+		return "", fmt.Errorf("container %s introuvable", id)
+	}
+	if tail <= 0 || tail > 2000 {
+		tail = 200
+	}
+	rc, err := n.cli.ContainerLogs(ctx, id, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       strconv.Itoa(tail),
+		Timestamps: false,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer rc.Close()
+
+	// Les logs Docker (TTY off) sont multiplexés : on démultiplexe stdout+stderr.
+	var out bytes.Buffer
+	if _, err := stdcopy.StdCopy(&out, &out, rc); err != nil {
+		// Container en TTY : le flux est du texte brut, on relit tel quel.
+		return out.String(), nil
+	}
+	return out.String(), nil
+}
+
 func (c *Collector) Collect(ctx context.Context) (*Snapshot, error) {
 	var allMetrics []ContainerMetric
 	var summaries []NodeSummary

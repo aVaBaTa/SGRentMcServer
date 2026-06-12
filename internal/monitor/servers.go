@@ -50,3 +50,17 @@ func ListServers(ctx context.Context, db *pgxpool.Pool) ([]ServerInfo, error) {
 	}
 	return list, nil
 }
+
+// GetServerContainer retourne (container_id, node) d'un serveur par son ID.
+func GetServerContainer(ctx context.Context, db *pgxpool.Pool, id string) (containerID, node string, err error) {
+	const q = `SELECT COALESCE(container_id,''), node FROM game_servers WHERE id = $1`
+	err = db.QueryRow(ctx, q, id).Scan(&containerID, &node)
+	return
+}
+
+// DeleteServer supprime la ligne d'un serveur de la table game_servers (action admin).
+// La suppression du container Docker est faite séparément côté collector.
+func DeleteServer(ctx context.Context, db *pgxpool.Pool, id string) error {
+	_, err := db.Exec(ctx, `DELETE FROM game_servers WHERE id = $1`, id)
+	return err
+}

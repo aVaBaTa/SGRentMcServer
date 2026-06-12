@@ -73,6 +73,7 @@ func (s *Server) mountRoutes() {
 	s.router.Route("/api/v1", func(r chi.Router) {
 		// --- Routes publiques (sans authentification) ---
 		r.Post("/support", s.handleSupport)
+		r.Post("/mail/ingest", s.handleMailIngest) // Cloudflare Email Worker → livraison locale (protégé par secret)
 
 		// --- Routes authentifiées ---
 		r.Group(func(r chi.Router) {

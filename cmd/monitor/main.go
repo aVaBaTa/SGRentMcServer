@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/aVaBaTa/SGRentMcServer/internal/monitor"
@@ -26,6 +27,21 @@ func main() {
 		slog.Error("failed to init collector", "err", err)
 		os.Exit(1)
 	}
+
+	// Historique en mémoire : ~1 échantillon / 20 s, gardé sur ~2 h (360 points).
+	history := monitor.NewHistory(360)
+	go func() {
+		tick := time.NewTicker(20 * time.Second)
+		defer tick.Stop()
+		for {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			if snap, err := collector.Collect(ctx); err == nil {
+				history.Record(snap)
+			}
+			cancel()
+			<-tick.C
+		}
+	}()
 
 	// Connexion DB optionnelle (pour la liste des utilisateurs)
 	var db *pgxpool.Pool
@@ -91,6 +107,24 @@ func main() {
 		json.NewEncoder(w).Encode(snap)
 	})
 
+	mux.HandleFunc("GET /api/history", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(history.Snapshot())
+	})
+
+	mux.HandleFunc("GET /api/containers/{id}/logs", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		tail, _ := strconv.Atoi(r.URL.Query().Get("tail"))
+		logs, err := collector.ContainerLogs(ctx, r.PathValue("id"), tail)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Write([]byte(logs))
+	})
+
 	mux.HandleFunc("POST /api/containers/{id}/stop", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
@@ -125,6 +159,34 @@ func main() {
 		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 		defer cancel()
 		if err := collector.RestartContainer(ctx, r.PathValue("id")); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// Suppression complète d'un serveur de jeu : container Docker + ligne DB game_servers.
+	// NB : ne libère pas encore volume / route mc-router (cf. #M, à câbler via orchestrateur).
+	mux.HandleFunc("POST /api/servers/{id}/delete", func(w http.ResponseWriter, r *http.Request) {
+		if db == nil {
+			http.Error(w, "db not configured", http.StatusServiceUnavailable)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+		defer cancel()
+		id := r.PathValue("id")
+		cid, _, err := monitor.GetServerContainer(ctx, db, id)
+		if err != nil {
+			http.Error(w, "serveur introuvable", http.StatusNotFound)
+			return
+		}
+		if cid != "" {
+			// Best-effort : le container peut déjà avoir disparu.
+			if err := collector.RemoveContainer(ctx, cid); err != nil {
+				slog.Warn("delete server: container removal failed", "id", id, "container", cid, "err", err)
+			}
+		}
+		if err := monitor.DeleteServer(ctx, db, id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

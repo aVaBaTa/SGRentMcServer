@@ -60,13 +60,24 @@ func parseAuthFromLogs(logs string) (st authStatus, done bool) {
 
 	var url, code string
 	for _, u := range anyURLRe.FindAllString(logs, -1) {
-		lu := strings.ToLower(u)
-		if strings.Contains(lu, "hytale") || strings.Contains(lu, "oauth") ||
-			strings.Contains(lu, "device") || strings.Contains(lu, "verify") {
-			url = strings.TrimRight(u, `.,)]}"'`)
-			if m := userCodeParamRe.FindStringSubmatch(u); m != nil {
-				code = m[1]
-			}
+		cand := strings.TrimRight(u, `.,)]}"'`)
+		lu := strings.ToLower(cand)
+		// Bruit : l'image logue parfois une URL de mise à jour du downloader
+		// (downloader.hytale.com/...zip) — ce n'est PAS une URL d'auth.
+		if strings.Contains(lu, ".zip") || strings.Contains(lu, "downloader.") {
+			continue
+		}
+		if !(strings.Contains(lu, "oauth") || strings.Contains(lu, "device") ||
+			strings.Contains(lu, "verify") || strings.Contains(lu, "authenticate")) {
+			continue
+		}
+		// Préfère l'URL « complète » (avec user_code → autorisation en 1 clic).
+		// Une URL nue ne doit jamais écraser une URL déjà trouvée avec son code.
+		if m := userCodeParamRe.FindStringSubmatch(cand); m != nil {
+			url = cand
+			code = m[1]
+		} else if url == "" {
+			url = cand
 		}
 	}
 	if code == "" {

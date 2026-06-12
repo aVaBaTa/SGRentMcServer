@@ -55,6 +55,7 @@ services:
       SMTP_PASS: ${SMTP_PASS}
       SUPPORT_FROM: contact@mcserver.vbt-prog.com
       SUPPORT_TO: contact@mcserver.vbt-prog.com
+      INGEST_SECRET: ${INGEST_SECRET}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./secrets/ssh:/etc/sgrent-ssh:ro

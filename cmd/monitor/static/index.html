@@ -5,23 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Playrena — Admin Monitor</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     body { background: #09090b; }
     .bar { transition: width .4s ease, background-color .4s ease; }
     @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
     .live-dot { animation: pulse-dot 1.5s infinite; }
+    @keyframes spin { to { transform: rotate(360deg) } }
+    .spin { animation: spin .7s linear infinite; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .tab.active { color: #4ade80; border-color: #22c55e; }
+    .toast-in { animation: toastIn .25s ease; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
   </style>
 </head>
 <body class="text-zinc-100 font-sans min-h-screen">
+  <!-- Toasts -->
+  <div id="toasts" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm"></div>
+
   <div class="max-w-7xl mx-auto px-6 py-8">
     <!-- Header -->
-    <header class="flex items-center justify-between mb-8">
+    <header class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-green-500/10 border border-green-500/30 flex items-center justify-center">
           <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
         </div>
         <div>
-          <h1 class="text-xl font-bold">Playrena — Monitor</h1>
+          <h1 class="text-xl font-bold">Playrena — Admin</h1>
           <p id="host-name" class="text-xs text-zinc-500">—</p>
         </div>
       </div>
@@ -31,57 +42,92 @@
       </div>
     </header>
 
-    <!-- Host summary -->
-    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">RAM totale (cluster)</div>
-        <div class="flex items-end justify-between mb-2">
-          <span id="host-mem-val" class="text-2xl font-bold">—</span>
-          <span id="host-mem-pct" class="text-sm text-zinc-400">—</span>
+    <!-- Navigation onglets -->
+    <nav class="flex flex-wrap gap-1 border-b border-zinc-800 mb-8 text-sm">
+      <button data-tab="dashboard" class="tab active px-4 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium">Dashboard</button>
+      <button data-tab="servers"   class="tab px-4 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium">Serveurs <span id="tab-srv-count" class="text-zinc-600"></span></button>
+      <button data-tab="containers" class="tab px-4 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium">Containers</button>
+      <button data-tab="nodes"     class="tab px-4 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium">Nodes</button>
+      <button data-tab="logs"      class="tab px-4 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium">Logs</button>
+      <button data-tab="users"     class="tab px-4 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium">Utilisateurs <span id="tab-user-count" class="text-zinc-600"></span></button>
+    </nav>
+
+    <!-- ===================== DASHBOARD ===================== -->
+    <div id="view-dashboard" class="view active">
+      <!-- Host summary -->
+      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">RAM totale (cluster)</div>
+          <div class="flex items-end justify-between mb-2">
+            <span id="host-mem-val" class="text-2xl font-bold">—</span>
+            <span id="host-mem-pct" class="text-sm text-zinc-400">—</span>
+          </div>
+          <div class="h-2 rounded-full bg-zinc-800 overflow-hidden"><div id="host-mem-bar" class="bar h-full bg-green-500" style="width:0%"></div></div>
         </div>
-        <div class="h-2 rounded-full bg-zinc-800 overflow-hidden"><div id="host-mem-bar" class="bar h-full bg-green-500" style="width:0%"></div></div>
-      </div>
-
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">CPU (cluster)</div>
-        <div class="flex items-end justify-between mb-2">
-          <span id="host-load-val" class="text-2xl font-bold">—</span>
-          <span id="host-cpu-count" class="text-sm text-zinc-400">—</span>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">CPU (cluster)</div>
+          <div class="flex items-end justify-between mb-2">
+            <span id="host-load-val" class="text-2xl font-bold">—</span>
+            <span id="host-cpu-count" class="text-sm text-zinc-400">—</span>
+          </div>
+          <div class="h-2 rounded-full bg-zinc-800 overflow-hidden"><div id="host-load-bar" class="bar h-full bg-green-500" style="width:0%"></div></div>
         </div>
-        <div class="h-2 rounded-full bg-zinc-800 overflow-hidden"><div id="host-load-bar" class="bar h-full bg-green-500" style="width:0%"></div></div>
-      </div>
-
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">Disque (cluster)</div>
-        <div class="flex items-end justify-between mb-2">
-          <span id="host-disk-val" class="text-2xl font-bold">—</span>
-          <span id="host-disk-pct" class="text-sm text-zinc-400">—</span>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">Disque (cluster)</div>
+          <div class="flex items-end justify-between mb-2">
+            <span id="host-disk-val" class="text-2xl font-bold">—</span>
+            <span id="host-disk-pct" class="text-sm text-zinc-400">—</span>
+          </div>
+          <div class="h-2 rounded-full bg-zinc-800 overflow-hidden"><div id="host-disk-bar" class="bar h-full bg-green-500" style="width:0%"></div></div>
         </div>
-        <div class="h-2 rounded-full bg-zinc-800 overflow-hidden"><div id="host-disk-bar" class="bar h-full bg-green-500" style="width:0%"></div></div>
-      </div>
-
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-        <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">Containers</div>
-        <div class="flex items-end justify-between mb-2">
-          <span id="ct-count" class="text-2xl font-bold">—</span>
-          <span class="text-sm text-zinc-400">actifs / total</span>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <div class="text-xs text-zinc-500 uppercase tracking-wide mb-2">Containers</div>
+          <div class="flex items-end justify-between mb-2">
+            <span id="ct-count" class="text-2xl font-bold">—</span>
+            <span class="text-sm text-zinc-400">actifs / total</span>
+          </div>
+          <div class="text-xs text-zinc-600 mt-3">Playrena + infra · <span id="players-total" class="text-emerald-300">0 joueur en ligne</span></div>
         </div>
-        <div class="text-xs text-zinc-600 mt-3">Playrena + infrastructure · <span id="players-total" class="text-emerald-300">0 joueur·s en ligne</span></div>
-      </div>
-    </section>
+      </section>
 
-    <!-- Trafic réseau -->
-    <section class="rounded-xl border border-zinc-800 bg-zinc-900 p-5 mb-8 flex items-center justify-between flex-wrap gap-4">
-      <div class="text-xs text-zinc-500 uppercase tracking-wide">Trafic réseau (serveurs)</div>
-      <div class="flex items-center gap-6">
-        <div class="flex items-center gap-1.5"><span class="text-zinc-400 text-sm">↓ Entrant</span><span id="net-rx" class="font-mono font-bold text-green-400">—</span></div>
-        <div class="flex items-center gap-1.5"><span class="text-zinc-400 text-sm">↑ Sortant</span><span id="net-tx" class="font-mono font-bold text-blue-400">—</span></div>
-        <div class="text-xs text-zinc-600">Total <span id="net-total">—</span></div>
-      </div>
-    </section>
+      <!-- Business KPIs -->
+      <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Serveurs</div><div id="kpi-srv" class="text-xl font-bold">—</div></div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Revenu est. /mois</div><div id="kpi-mrr" class="text-xl font-bold text-green-400">—</div></div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Utilisateurs</div><div id="kpi-users" class="text-xl font-bold">—</div></div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Joueurs en ligne</div><div id="kpi-players" class="text-xl font-bold text-emerald-300">—</div></div>
+      </section>
 
-    <!-- Serveurs Playrena (depuis la DB) -->
-    <section class="mb-8">
+      <!-- Trafic réseau -->
+      <section class="rounded-xl border border-zinc-800 bg-zinc-900 p-5 mb-6 flex items-center justify-between flex-wrap gap-4">
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Trafic réseau (serveurs)</div>
+        <div class="flex items-center gap-6">
+          <div class="flex items-center gap-1.5"><span class="text-zinc-400 text-sm">↓ Entrant</span><span id="net-rx" class="font-mono font-bold text-green-400">—</span></div>
+          <div class="flex items-center gap-1.5"><span class="text-zinc-400 text-sm">↑ Sortant</span><span id="net-tx" class="font-mono font-bold text-blue-400">—</span></div>
+          <div class="text-xs text-zinc-600">Total <span id="net-total">—</span></div>
+        </div>
+      </section>
+
+      <!-- Graphiques historiques -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-2">
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <div class="text-xs text-zinc-500 uppercase tracking-wide mb-3">CPU & RAM cluster (%)</div>
+          <div class="h-48"><canvas id="chart-cpu"></canvas></div>
+        </div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <div class="text-xs text-zinc-500 uppercase tracking-wide mb-3">Joueurs & containers actifs</div>
+          <div class="h-48"><canvas id="chart-players"></canvas></div>
+        </div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5 lg:col-span-2">
+          <div class="text-xs text-zinc-500 uppercase tracking-wide mb-3">Trafic réseau (MB/s)</div>
+          <div class="h-48"><canvas id="chart-net"></canvas></div>
+        </div>
+      </section>
+      <p class="text-[11px] text-zinc-600 mb-8">Historique en mémoire (~1 point / 20 s, ~2 h). Repart à zéro au redémarrage du monitor.</p>
+    </div>
+
+    <!-- ===================== SERVEURS ===================== -->
+    <div id="view-servers" class="view">
       <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
         <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide">Serveurs Playrena <span id="srv-count" class="text-zinc-600"></span></h2>
         <div id="srv-filter" class="flex flex-wrap gap-1.5"></div>
@@ -92,7 +138,7 @@
         <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">RAM allouée</div><div id="srv-ram" class="text-xl font-bold">—</div></div>
         <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">vCPU alloués</div><div id="srv-cpu" class="text-xl font-bold">—</div></div>
       </div>
-      <div class="flex items-center gap-2 mb-3">
+      <div class="flex items-center gap-2 mb-3 flex-wrap">
         <span class="text-xs text-zinc-500">Actions en masse <span id="bulk-scope" class="text-zinc-400"></span> :</span>
         <button onclick="bulkAction('restart')" class="text-xs px-2.5 py-1 rounded-md border border-blue-800 text-blue-300 hover:bg-blue-900/40 transition-colors">↻ Tout redémarrer</button>
         <button onclick="bulkAction('stop')" class="text-xs px-2.5 py-1 rounded-md border border-yellow-800 text-yellow-300 hover:bg-yellow-900/40 transition-colors">■ Tout arrêter</button>
@@ -114,22 +160,43 @@
           <tbody id="srv-rows"></tbody>
         </table>
       </div>
-    </section>
+      <p class="text-[11px] text-zinc-600 mt-3">« Supprimer » retire le container <strong>et</strong> la ligne en base. La création de serveur pour un utilisateur (orchestrateur) arrive — cf. #M.</p>
+    </div>
 
-    <!-- Nodes (serveurs physiques) -->
-    <section class="mb-8">
+    <!-- ===================== CONTAINERS ===================== -->
+    <div id="view-containers" class="view">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide">Containers <span id="container-filter" class="text-green-400 normal-case font-normal"></span></h2>
+      </div>
+      <div id="containers" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+    </div>
+
+    <!-- ===================== NODES ===================== -->
+    <div id="view-nodes" class="view">
       <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Nodes (serveurs physiques)</h2>
       <div id="nodes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-    </section>
+      <p class="text-[11px] text-zinc-600 mt-3">Clique un node pour filtrer les containers de l'onglet « Containers ».</p>
+    </div>
 
-    <!-- Containers -->
-    <section class="mb-8">
-      <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Containers <span id="container-filter" class="text-green-400 normal-case font-normal"></span></h2>
-      <div id="containers" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
-    </section>
+    <!-- ===================== LOGS ===================== -->
+    <div id="view-logs" class="view">
+      <div class="flex items-center gap-3 flex-wrap mb-4">
+        <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide">Logs</h2>
+        <select id="log-select" class="bg-zinc-900 border border-zinc-700 rounded-md text-sm px-3 py-1.5 text-zinc-200 min-w-64"></select>
+        <select id="log-tail" class="bg-zinc-900 border border-zinc-700 rounded-md text-sm px-3 py-1.5 text-zinc-200">
+          <option value="100">100 lignes</option>
+          <option value="200" selected>200 lignes</option>
+          <option value="500">500 lignes</option>
+          <option value="1000">1000 lignes</option>
+        </select>
+        <button id="log-refresh" class="text-xs px-3 py-1.5 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800">↻ Rafraîchir</button>
+        <label class="text-xs text-zinc-400 flex items-center gap-1.5"><input type="checkbox" id="log-auto" class="accent-green-500"> auto (5 s)</label>
+      </div>
+      <pre id="log-output" class="rounded-xl border border-zinc-800 bg-black/60 p-4 text-[12px] leading-relaxed text-zinc-300 font-mono overflow-auto" style="max-height:65vh; white-space:pre-wrap;">Sélectionne un container.</pre>
+    </div>
 
-    <!-- Utilisateurs -->
-    <section>
+    <!-- ===================== UTILISATEURS ===================== -->
+    <div id="view-users" class="view">
       <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Utilisateurs <span id="user-count" class="text-zinc-600"></span></h2>
       <div class="rounded-xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
         <table class="w-full text-sm">
@@ -145,10 +212,11 @@
           <tbody id="users"></tbody>
         </table>
       </div>
-    </section>
+    </div>
   </div>
 
   <script>
+    // ---------- Utilitaires ----------
     const fmtMB = (mb) => mb >= 1024 ? (mb/1024).toFixed(2)+' GB' : mb.toFixed(0)+' MB';
     const fmtUptime = (s) => {
       if (!s) return '';
@@ -156,26 +224,90 @@
       if (d) return `${d}j ${h}h`; if (h) return `${h}h ${m}m`; return `${m}m`;
     };
     const barColor = (p) => p >= 90 ? 'bg-red-500' : p >= 70 ? 'bg-yellow-500' : 'bg-green-500';
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+    // ---------- Toasts ----------
+    function toast(msg, type = 'info') {
+      const colors = { ok: 'border-green-700 bg-green-950/80 text-green-200', err: 'border-red-700 bg-red-950/80 text-red-200', info: 'border-zinc-700 bg-zinc-900 text-zinc-200' };
+      const el = document.createElement('div');
+      el.className = `toast-in rounded-lg border px-4 py-2.5 text-sm shadow-lg ${colors[type] || colors.info}`;
+      el.textContent = msg;
+      document.getElementById('toasts').appendChild(el);
+      setTimeout(() => { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, type === 'err' ? 6000 : 3500);
+    }
+
+    // ---------- Navigation onglets ----------
+    let activeTab = 'dashboard';
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab));
+      if (tab === 'dashboard') fetchHistory();
+      if (tab === 'logs') ensureLogSelection();
+    }
+
+    // ---------- Actions container (robustes) ----------
+    const busyIds = new Set(); // ids d'actions en cours → boutons désactivés / spinner
+
+    async function ctrl(id, action, name) {
+      const verbs = { stop: 'arrêter', delete: 'SUPPRIMER (container)', start: 'démarrer', restart: 'redémarrer' };
+      const destructive = action === 'stop' || action === 'delete';
+      if (destructive && !confirm(`Veux-tu vraiment ${verbs[action]} « ${name} » ?`)) return;
+      busyIds.add(id); renderContainers(); renderServers();
+      try {
+        const res = await fetch(`api/containers/${id}/${action}`, { method: 'POST' });
+        if (!res.ok && res.status !== 204) throw new Error((await res.text()) || ('HTTP ' + res.status));
+        toast(`« ${name} » : ${verbs[action].toLowerCase()} ✓`, 'ok');
+      } catch (e) {
+        toast(`Échec ${verbs[action].toLowerCase()} « ${name} » : ${e.message}`, 'err');
+      } finally {
+        busyIds.delete(id);
+        await refresh(); await fetchServers();
+      }
+    }
+
+    // Suppression complète d'un serveur (container + ligne DB).
+    async function deleteServer(srvId, cid, label) {
+      if (!confirm(`SUPPRIMER définitivement le serveur « ${label} » ?\n\nCela retire le container ET la ligne en base. Action irréversible.`)) return;
+      const key = 'srv:' + srvId;
+      busyIds.add(key); renderServers();
+      try {
+        const res = await fetch(`api/servers/${srvId}/delete`, { method: 'POST' });
+        if (!res.ok && res.status !== 204) throw new Error((await res.text()) || ('HTTP ' + res.status));
+        toast(`Serveur « ${label} » supprimé ✓`, 'ok');
+      } catch (e) {
+        toast(`Échec suppression « ${label} » : ${e.message}`, 'err');
+      } finally {
+        busyIds.delete(key);
+        await fetchServers(); await refresh(); fetchUsers();
+      }
+    }
+
+    // ---------- Containers ----------
     function renderContainer(c) {
       const running = c.state === 'running';
       const memPct = Math.min(c.mem_percent || 0, 100);
       const cpuPct = Math.min(c.cpu_percent || 0, 100);
       const stateColor = running ? 'bg-green-400' : c.state === 'exited' ? 'bg-red-400' : 'bg-zinc-500';
+      const busy = busyIds.has(c.id);
+      const spin = '<span class="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full spin align-middle"></span>';
+      const btn = (a, label, cls) => `<button ${busy ? 'disabled' : ''} onclick="ctrl('${c.id}','${a}','${esc(c.name)}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 ${cls} transition-colors ${busy ? 'opacity-50 cursor-not-allowed' : ''}">${busy ? spin : label}</button>`;
       return `
         <div class="rounded-xl border ${c.managed ? 'border-green-800/60' : 'border-zinc-800'} bg-zinc-900 p-5">
           <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-2.5 h-2.5 rounded-full shrink-0 ${stateColor}"></span>
-              <span class="font-semibold truncate">${c.name}</span>
-              <span class="text-[10px] font-semibold text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded shrink-0">${c.node}</span>
+              <span class="font-semibold truncate">${esc(c.name)}</span>
+              <span class="text-[10px] font-semibold text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded shrink-0">${esc(c.node)}</span>
               ${c.managed ? '<span class="text-[10px] font-semibold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded shrink-0">Playrena</span>' : ''}
               ${c.has_players ? '<span class="text-[10px] font-semibold text-emerald-300 bg-emerald-500/10 px-1.5 py-0.5 rounded shrink-0">👤 '+c.players_online+'/'+c.players_max+'</span>' : ''}
             </div>
             <span class="text-xs text-zinc-500 shrink-0">${fmtUptime(c.uptime_secs)}</span>
           </div>
-          <div class="text-[11px] text-zinc-600 mb-4 truncate">${c.image}</div>
-
+          <div class="text-[11px] text-zinc-600 mb-4 truncate">${esc(c.image)}</div>
           ${running ? `
           <div class="space-y-3">
             <div>
@@ -191,40 +323,20 @@
               <span>↓${c.net_rx_mb.toFixed(1)} ↑${c.net_tx_mb.toFixed(1)} MB</span>
             </div>
           </div>` : `
-          <div class="text-sm text-zinc-600 mb-3">${c.status}</div>`}
-
-          <!-- Actions admin -->
+          <div class="text-sm text-zinc-600 mb-3">${esc(c.status)}</div>`}
           <div class="flex gap-2 mt-4 pt-3 border-t border-zinc-800">
             ${running
-              ? `<button onclick="ctrl('${c.id}','restart','${c.name}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-blue-900/60 text-blue-300 transition-colors">Redémarrer</button>
-                 <button onclick="ctrl('${c.id}','stop','${c.name}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-yellow-900/60 text-yellow-400 transition-colors">Arrêter</button>`
-              : `<button onclick="ctrl('${c.id}','start','${c.name}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-green-900/60 text-green-400 transition-colors">Démarrer</button>`}
-            <button onclick="ctrl('${c.id}','delete','${c.name}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-red-900/60 text-red-400 transition-colors">Supprimer</button>
+              ? btn('restart', 'Redémarrer', 'hover:bg-blue-900/60 text-blue-300') + btn('stop', 'Arrêter', 'hover:bg-yellow-900/60 text-yellow-400')
+              : btn('start', 'Démarrer', 'hover:bg-green-900/60 text-green-400')}
+            ${btn('delete', 'Supprimer', 'hover:bg-red-900/60 text-red-400')}
+            <button onclick="openLogs('${c.id}')" class="flex-1 text-xs font-medium py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors">Logs</button>
           </div>
         </div>`;
     }
 
-    async function ctrl(id, action, name) {
-      const verbs = { stop: "arrêter", delete: "SUPPRIMER", start: "démarrer", restart: "redémarrer" };
-      const destructive = action === 'stop' || action === 'delete';
-      if (destructive && !confirm(`Veux-tu vraiment ${verbs[action]} "${name}" ?`)) return;
-      try {
-        const res = await fetch(`api/containers/${id}/${action}`, { method: 'POST' });
-        if (!res.ok && res.status !== 204) alert('Erreur: ' + (await res.text()));
-      } catch (e) { alert('Erreur de connexion'); }
-      refresh();
-      fetchServers();
-    }
-
-    // --- Cluster : sélection de node + filtrage des containers ---
     let lastSnap = null;
     let nodeFilter = '';
-
-    function toggleNode(id) {
-      nodeFilter = (nodeFilter === id) ? '' : id;
-      renderNodes();
-      renderContainers();
-    }
+    function toggleNode(id) { nodeFilter = (nodeFilter === id) ? '' : id; renderNodes(); renderContainers(); }
 
     function renderNodes() {
       if (!lastSnap) return;
@@ -237,7 +349,7 @@
           <div onclick="toggleNode('${n.id}')" class="cursor-pointer rounded-xl border ${sel ? 'border-green-500 ring-1 ring-green-500/40' : (n.online ? 'border-zinc-800 hover:border-zinc-600' : 'border-red-900')} bg-zinc-900 p-5 transition-colors">
             <div class="flex items-center justify-between mb-3">
               <span class="font-semibold flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full ${n.online ? 'bg-green-400' : 'bg-red-500'}"></span>${n.id}
+                <span class="w-2 h-2 rounded-full ${n.online ? 'bg-green-400' : 'bg-red-500'}"></span>${esc(n.id)}
                 ${sel ? '<span class="text-[10px] text-green-400">● filtré</span>' : ''}
               </span>
               <span class="text-xs text-zinc-500">${n.cpu_count} cœurs · ${n.containers} containers</span>
@@ -255,21 +367,20 @@
       const list = (lastSnap.containers || []).filter(c => !nodeFilter || c.node === nodeFilter);
       document.getElementById('containers').innerHTML = list.map(renderContainer).join('');
       document.getElementById('container-filter').textContent = nodeFilter
-        ? `— ${nodeFilter} (${list.length}) · clique à nouveau le node pour tout voir`
+        ? `— ${nodeFilter} (${list.length}) · clique le node à nouveau pour tout voir`
         : '';
     }
 
+    // ---------- Stats live ----------
     async function refresh() {
       try {
         const res = await fetch('api/stats');
         if (!res.ok) throw new Error(res.status);
         const d = await res.json();
         const h = d.host;
-
         const nodes = d.nodes || [];
         document.getElementById('host-name').textContent = h.hostname + ' + ' + nodes.length + ' node(s)';
 
-        // RAM agrégée sur TOUTES les nodes
         const totRam = nodes.reduce((a,n)=>a+(n.mem_total_mb||0),0);
         const usedRam = nodes.reduce((a,n)=>a+(n.mem_used_mb||0),0);
         const ramPct = totRam ? usedRam/totRam*100 : 0;
@@ -278,7 +389,6 @@
         const memBar = document.getElementById('host-mem-bar');
         memBar.style.width = ramPct + '%'; memBar.className = 'bar h-full ' + barColor(ramPct);
 
-        // CPU agrégé : cœurs totaux + charge cumulée des containers
         const totCores = nodes.reduce((a,n)=>a+(n.cpu_count||0),0);
         const aggCpu = (d.containers||[]).reduce((a,c)=>a+(c.cpu_percent||0),0);
         const cpuPct = totCores ? Math.min(aggCpu/totCores,100) : 0;
@@ -297,45 +407,49 @@
         document.getElementById('net-total').textContent = `↓${h.net_rx_total_gb.toFixed(1)} ↑${h.net_tx_total_gb.toFixed(1)} GB`;
 
         document.getElementById('ct-count').textContent = h.container_up + ' / ' + h.container_total;
-
         const totPlayers = (d.containers||[]).reduce((a,c)=>a+(c.has_players?c.players_online:0),0);
         document.getElementById('players-total').textContent = totPlayers + (totPlayers===1?' joueur en ligne':' joueurs en ligne');
+        document.getElementById('kpi-players').textContent = totPlayers;
 
         lastSnap = d;
         renderNodes();
         renderContainers();
-
+        populateLogSelect();
         document.getElementById('last-update').textContent = 'à jour · ' + new Date(d.timestamp).toLocaleTimeString('fr-CA');
       } catch (e) {
         document.getElementById('last-update').textContent = 'erreur de connexion';
       }
     }
 
+    // ---------- Utilisateurs ----------
     const planColor = (p) => p === 'free' ? 'text-zinc-400' : 'text-green-400';
+    let lastUsers = [];
     async function fetchUsers() {
       try {
         const res = await fetch('api/users');
         if (!res.ok) { document.getElementById('users').innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-zinc-600">Liste indisponible</td></tr>'; return; }
-        const users = await res.json();
-        document.getElementById('user-count').textContent = `(${users.length})`;
-        document.getElementById('users').innerHTML = users.length ? users.map(u => `
+        lastUsers = await res.json();
+        document.getElementById('user-count').textContent = `(${lastUsers.length})`;
+        document.getElementById('tab-user-count').textContent = `(${lastUsers.length})`;
+        document.getElementById('kpi-users').textContent = lastUsers.length;
+        document.getElementById('users').innerHTML = lastUsers.length ? lastUsers.map(u => `
           <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30">
             <td class="px-4 py-3">
               <div class="flex items-center gap-2">
-                ${u.avatar ? `<img src="${u.avatar}" class="w-6 h-6 rounded-full" />` : '<div class="w-6 h-6 rounded-full bg-zinc-700"></div>'}
-                <span class="font-medium">${u.username}</span>
+                ${u.avatar ? `<img src="${esc(u.avatar)}" class="w-6 h-6 rounded-full" />` : '<div class="w-6 h-6 rounded-full bg-zinc-700"></div>'}
+                <span class="font-medium">${esc(u.username)}</span>
               </div>
             </td>
-            <td class="px-4 py-3 text-zinc-400">${u.email || '—'}</td>
-            <td class="px-4 py-3 capitalize ${planColor(u.plan)}">${u.plan}</td>
+            <td class="px-4 py-3 text-zinc-400">${esc(u.email) || '—'}</td>
+            <td class="px-4 py-3 capitalize ${planColor(u.plan)}">${esc(u.plan)}</td>
             <td class="px-4 py-3 font-mono">${u.server_count}</td>
             <td class="px-4 py-3 text-zinc-500 text-xs">${new Date(u.created_at).toLocaleDateString('fr-CA')}</td>
           </tr>`).join('') : '<tr><td colspan="5" class="px-4 py-4 text-zinc-600">Aucun utilisateur</td></tr>';
       } catch (e) { /* ignore */ }
     }
 
-    // --- Serveurs Playrena (DB) ---
-    const PLAN_PRICE = { free: 0, starter: 2, standard: 5, pro: 9, extreme: 16 }; // USD/mois
+    // ---------- Serveurs (DB) ----------
+    const PLAN_PRICE = { free: 0, starter: 2, standard: 5, pro: 9, extreme: 16 };
     const SRV_STATUS = {
       running:       { dot: 'bg-green-400',  txt: 'text-green-400',  label: 'En ligne' },
       creating:      { dot: 'bg-yellow-400', txt: 'text-yellow-400', label: 'Création' },
@@ -351,7 +465,7 @@
       const all = lastServers;
       const games = [...new Set(all.map(s => s.game))].sort();
       const chip = (g, label, count, active) =>
-        `<button onclick="setGameFilter('${g}')" class="text-xs px-2.5 py-1 rounded-md border ${active ? 'border-green-500 text-green-400 bg-green-500/10' : 'border-zinc-700 text-zinc-400 hover:text-zinc-200'}">${label} <span class="opacity-60">${count}</span></button>`;
+        `<button onclick="setGameFilter('${g}')" class="text-xs px-2.5 py-1 rounded-md border ${active ? 'border-green-500 text-green-400 bg-green-500/10' : 'border-zinc-700 text-zinc-400 hover:text-zinc-200'}">${esc(label)} <span class="opacity-60">${count}</span></button>`;
       document.getElementById('srv-filter').innerHTML =
         chip('', 'Tous', all.length, gameFilter === '') +
         games.map(g => chip(g, g, all.filter(s => s.game === g).length, gameFilter === g)).join('');
@@ -361,44 +475,55 @@
       const ram = list.reduce((a, s) => a + (s.ram_mb || 0), 0);
       const cpu = list.reduce((a, s) => a + (s.cpu_cores || 0), 0);
       document.getElementById('srv-count').textContent = `(${list.length})`;
+      document.getElementById('tab-srv-count').textContent = `(${all.length})`;
       document.getElementById('bulk-scope').textContent = gameFilter ? `(${gameFilter})` : '(tous les jeux)';
       document.getElementById('srv-total').textContent = list.length;
       document.getElementById('srv-mrr').textContent = '$' + mrr;
       document.getElementById('srv-ram').textContent = (ram / 1024).toFixed(0) + ' GB';
       document.getElementById('srv-cpu').textContent = cpu.toFixed(cpu % 1 ? 1 : 0);
+      // KPIs dashboard (toujours sur l'ensemble)
+      document.getElementById('kpi-srv').textContent = all.length;
+      document.getElementById('kpi-mrr').textContent = '$' + all.reduce((a, s) => a + (PLAN_PRICE[s.plan] || 0), 0);
 
+      const spin = '<span class="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full spin align-middle"></span>';
       document.getElementById('srv-rows').innerHTML = list.length ? list.map(s => {
         const st = SRV_STATUS[s.status] || { dot: 'bg-zinc-500', txt: 'text-zinc-400', label: s.status };
         const cid = s.container_id, running = s.status === 'running';
-        const btn = (a, sym, cls) => `<button onclick="ctrl('${cid}','${a}','${s.subdomain}')" class="text-xs px-2 py-1 rounded bg-zinc-800 ${cls}">${sym}</button>`;
-        const acts = cid
+        const cbusy = busyIds.has(cid), sbusy = busyIds.has('srv:' + s.id);
+        const label = esc(s.subdomain || s.id);
+        const btn = (a, sym, cls) => `<button ${cbusy ? 'disabled' : ''} onclick="ctrl('${cid}','${a}','${label}')" class="text-xs px-2 py-1 rounded bg-zinc-800 ${cls} ${cbusy ? 'opacity-50 cursor-not-allowed' : ''}">${cbusy ? spin : sym}</button>`;
+        const ctrlActs = cid
           ? (running ? btn('restart', '↻', 'hover:bg-blue-900/60 text-blue-300') + btn('stop', '■', 'hover:bg-yellow-900/60 text-yellow-400')
                      : btn('start', '▶', 'hover:bg-green-900/60 text-green-400'))
-            + btn('delete', '🗑', 'hover:bg-red-900/60 text-red-400')
-          : '<span class="text-xs text-zinc-600">—</span>';
+          : '';
+        const delBtn = `<button ${sbusy ? 'disabled' : ''} onclick="deleteServer('${s.id}','${cid}','${label}')" title="Supprimer le serveur (container + DB)" class="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-red-900/60 text-red-400 ${sbusy ? 'opacity-50 cursor-not-allowed' : ''}">${sbusy ? spin : '🗑'}</button>`;
+        const logBtn = cid ? `<button onclick="openLogs('${cid}')" class="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300">≡</button>` : '';
         return `<tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30">
-          <td class="px-4 py-3"><span class="inline-flex items-center gap-2"><span class="w-2 h-2 rounded-full ${st.dot}"></span><span class="${st.txt}">${st.label}</span></span></td>
-          <td class="px-4 py-3"><span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">${s.game}</span></td>
-          <td class="px-4 py-3"><div class="font-medium">${s.subdomain || '—'}</div><div class="text-[11px] text-zinc-600 font-mono">:${s.port || '—'}</div></td>
-          <td class="px-4 py-3 text-zinc-400">${s.owner || '—'}</td>
-          <td class="px-4 py-3 capitalize">${s.plan}</td>
+          <td class="px-4 py-3"><span class="inline-flex items-center gap-2"><span class="w-2 h-2 rounded-full ${st.dot}"></span><span class="${st.txt}">${esc(st.label)}</span></span></td>
+          <td class="px-4 py-3"><span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">${esc(s.game)}</span></td>
+          <td class="px-4 py-3"><div class="font-medium">${esc(s.subdomain) || '—'}</div><div class="text-[11px] text-zinc-600 font-mono">:${s.port || '—'}</div></td>
+          <td class="px-4 py-3 text-zinc-400">${esc(s.owner) || '—'}</td>
+          <td class="px-4 py-3 capitalize">${esc(s.plan)}</td>
           <td class="px-4 py-3 font-mono">${(s.ram_mb / 1024).toFixed(0)} GB</td>
-          <td class="px-4 py-3 text-zinc-500">${s.node}</td>
-          <td class="px-4 py-3"><div class="flex gap-1.5">${acts}</div></td>
+          <td class="px-4 py-3 text-zinc-500">${esc(s.node)}</td>
+          <td class="px-4 py-3"><div class="flex gap-1.5">${ctrlActs}${logBtn}${delBtn}</div></td>
         </tr>`;
       }).join('') : '<tr><td colspan="8" class="px-4 py-4 text-zinc-600">Aucun serveur</td></tr>';
     }
 
-    // Actions en masse sur la liste filtrée (tous, ou le jeu sélectionné).
     async function bulkAction(action) {
       const list = (gameFilter ? lastServers.filter(s => s.game === gameFilter) : lastServers).filter(s => s.container_id);
-      if (!list.length) { alert('Aucun serveur à traiter.'); return; }
+      if (!list.length) { toast('Aucun serveur à traiter.', 'info'); return; }
       const verbs = { stop: 'arrêter', restart: 'redémarrer' };
-      const scope = gameFilter ? `du jeu "${gameFilter}"` : '(tous jeux)';
+      const scope = gameFilter ? `du jeu « ${gameFilter} »` : '(tous jeux)';
       if (!confirm(`Veux-tu vraiment ${verbs[action]} ${list.length} serveur(s) ${scope} ?`)) return;
-      await Promise.allSettled(list.map(s => fetch(`api/containers/${s.container_id}/${action}`, { method: 'POST' })));
-      refresh();
-      fetchServers();
+      list.forEach(s => busyIds.add(s.container_id)); renderServers(); renderContainers();
+      const results = await Promise.allSettled(list.map(s => fetch(`api/containers/${s.container_id}/${action}`, { method: 'POST' })));
+      list.forEach(s => busyIds.delete(s.container_id));
+      const failed = results.filter(r => r.status === 'rejected' || (r.value && !r.value.ok && r.value.status !== 204)).length;
+      if (failed) toast(`${verbs[action]} : ${list.length - failed}/${list.length} OK, ${failed} échec(s)`, 'err');
+      else toast(`${list.length} serveur(s) : ${verbs[action]} ✓`, 'ok');
+      await refresh(); await fetchServers();
     }
 
     async function fetchServers() {
@@ -410,12 +535,103 @@
       } catch (e) { /* ignore */ }
     }
 
-    refresh();
-    setInterval(refresh, 2000);
-    fetchUsers();
-    setInterval(fetchUsers, 15000);
-    fetchServers();
-    setInterval(fetchServers, 5000);
+    // ---------- Logs ----------
+    function populateLogSelect() {
+      const sel = document.getElementById('log-select');
+      if (!lastSnap) return;
+      const prev = sel.value;
+      const cs = (lastSnap.containers || []).slice().sort((a,b) => (b.managed?1:0)-(a.managed?1:0) || a.name.localeCompare(b.name));
+      sel.innerHTML = '<option value="">— choisir un container —</option>' + cs.map(c =>
+        `<option value="${c.id}">${c.managed ? '★ ' : ''}${esc(c.name)} (${esc(c.node)})</option>`).join('');
+      if (prev && cs.some(c => c.id === prev)) sel.value = prev;
+    }
+    function ensureLogSelection() {
+      const sel = document.getElementById('log-select');
+      if (!sel.value && sel.options.length > 1) sel.selectedIndex = 1;
+      if (sel.value) fetchLogs();
+    }
+    function openLogs(id) {
+      switchTab('logs');
+      const sel = document.getElementById('log-select');
+      if (![...sel.options].some(o => o.value === id)) populateLogSelect();
+      sel.value = id;
+      fetchLogs();
+    }
+    async function fetchLogs() {
+      const id = document.getElementById('log-select').value;
+      const tail = document.getElementById('log-tail').value;
+      const out = document.getElementById('log-output');
+      if (!id) { out.textContent = 'Sélectionne un container.'; return; }
+      try {
+        const res = await fetch(`api/containers/${id}/logs?tail=${tail}`);
+        if (!res.ok) throw new Error((await res.text()) || ('HTTP ' + res.status));
+        const txt = await res.text();
+        const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
+        out.textContent = txt || '(aucun log)';
+        if (atBottom) out.scrollTop = out.scrollHeight;
+      } catch (e) {
+        out.textContent = 'Erreur : ' + e.message;
+      }
+    }
+    document.getElementById('log-select').addEventListener('change', fetchLogs);
+    document.getElementById('log-tail').addEventListener('change', fetchLogs);
+    document.getElementById('log-refresh').addEventListener('click', fetchLogs);
+    let logAutoTimer = null;
+    document.getElementById('log-auto').addEventListener('change', (e) => {
+      clearInterval(logAutoTimer);
+      if (e.target.checked) logAutoTimer = setInterval(fetchLogs, 5000);
+    });
+
+    // ---------- Graphiques (Chart.js) ----------
+    let charts = {};
+    const baseOpts = (yMax) => ({
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#a1a1aa', boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#52525b', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: '#18181b' } },
+        y: { beginAtZero: true, suggestedMax: yMax, ticks: { color: '#52525b', font: { size: 10 } }, grid: { color: '#18181b' } },
+      },
+    });
+    function lineDS(label, color) {
+      return { label, data: [], borderColor: color, backgroundColor: color + '22', borderWidth: 2, pointRadius: 0, tension: .3, fill: true };
+    }
+    function initCharts() {
+      const ctxCpu = document.getElementById('chart-cpu');
+      const ctxPl = document.getElementById('chart-players');
+      const ctxNet = document.getElementById('chart-net');
+      if (!ctxCpu || charts.cpu) return;
+      charts.cpu = new Chart(ctxCpu, { type: 'line', data: { labels: [], datasets: [lineDS('CPU %', '#4ade80'), lineDS('RAM %', '#60a5fa')] }, options: baseOpts(100) });
+      charts.players = new Chart(ctxPl, { type: 'line', data: { labels: [], datasets: [lineDS('Joueurs', '#34d399'), lineDS('Containers actifs', '#a78bfa')] }, options: baseOpts(undefined) });
+      charts.net = new Chart(ctxNet, { type: 'line', data: { labels: [], datasets: [lineDS('↓ MB/s', '#4ade80'), lineDS('↑ MB/s', '#60a5fa')] }, options: baseOpts(undefined) });
+    }
+    async function fetchHistory() {
+      try {
+        initCharts();
+        const res = await fetch('api/history');
+        if (!res.ok) return;
+        const data = await res.json();
+        const labels = data.map(s => new Date(s.t).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }));
+        charts.cpu.data.labels = labels;
+        charts.cpu.data.datasets[0].data = data.map(s => +s.cpu_percent.toFixed(1));
+        charts.cpu.data.datasets[1].data = data.map(s => s.mem_total_mb ? +(s.mem_used_mb / s.mem_total_mb * 100).toFixed(1) : 0);
+        charts.cpu.update();
+        charts.players.data.labels = labels;
+        charts.players.data.datasets[0].data = data.map(s => s.players);
+        charts.players.data.datasets[1].data = data.map(s => s.containers_up);
+        charts.players.update();
+        charts.net.data.labels = labels;
+        charts.net.data.datasets[0].data = data.map(s => +s.net_rx_mbs.toFixed(2));
+        charts.net.data.datasets[1].data = data.map(s => +s.net_tx_mbs.toFixed(2));
+        charts.net.update();
+      } catch (e) { /* ignore */ }
+    }
+
+    // ---------- Boucles ----------
+    refresh();        setInterval(refresh, 2000);
+    fetchUsers();     setInterval(fetchUsers, 15000);
+    fetchServers();   setInterval(fetchServers, 5000);
+    fetchHistory();   setInterval(() => { if (activeTab === 'dashboard') fetchHistory(); }, 20000);
   </script>
 </body>
 </html>

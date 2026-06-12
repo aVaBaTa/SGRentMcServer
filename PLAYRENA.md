@@ -147,10 +147,46 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
 
 **Gardé tel quel (interne, invisible du public) :** repo `SGRentMcServer`, module Go `github.com/aVaBaTa/SGRentMcServer`, conteneurs/images `mcserver-*`, mail `contact@mcserver.vbt-prog.com`. Domaine propre (`playrena.com`/`.gg`) = plus tard.
 
+## ✅ Session 2026-06-11 — Discord, mail, webmail, support, i18n, branches
+
+**Frontend / UX :**
+- Dashboard `/dashboard` : bouton **« Créer un serveur » centré et mis en avant**, **sélecteur de jeu** (Minecraft live ; autres « Bientôt » désactivés, depuis `lib/games.ts`), **switch FR/EN** (composant `LanguageSwitcher` exporté de `site-chrome.tsx`).
+- **i18n complet de la page serveur** `/dashboard/servers/[id]` (dict `srv` FR/EN dans `lib/i18n.tsx`) + switch de langue.
+- **Selects cohérents cross-navigateur** (fix rendu macOS/Safari) : classe `.select-dark` dans `globals.css` (appearance-none + chevron SVG + color-scheme dark), appliquée à tous les `<select>`.
+- **Section FAQ** sur la page principale (`/games/minecraft`) : accordéon bilingue + balisage SEO `FAQPage`.
+- **Section Support** (`#support`, même page) : formulaire bilingue (nom/email/objet/message) → `POST /api/v1/support`.
+
+**Support email (backend + infra) :**
+- `internal/mailer/mailer.go` (SMTP STARTTLS + auth, verify off car réseau interne) + `internal/server/handlers_support.go` (route **publique** `POST /api/v1/support`, hors middleware auth — groupe séparé dans `server.go`). Config SMTP dans `config.go`.
+- `mcserver-api` connecté au réseau **`sgmail_default`** (compose) pour joindre `mailserver:587`. Envoi authentifié comme `contact@mcserver.vbt-prog.com` → livré dans l'INBOX (vérifié). `SMTP_PASS` dans `.env` (gitignored).
+
+**Discord (serveur communautaire) :**
+- Serveur **« Playrena »** créé (guild `1514341359794786426`, proprio = l'utilisateur) et **configuré par l'API** (bot token) : rôles Fondateur/Staff/Modérateur/Client, catégories 📢 INFORMATIONS (lecture seule) / 💬 COMMUNAUTÉ / 🛟 SUPPORT (#support-prioritaire réservé Client) / 🔊 VOCAUX, règlement + FAQ bilingues postés, icône = logo.
+- **Invitation `https://discord.gg/3knNHXqpNG`** intégrée au site (`site-chrome.tsx`, bandeau + footer). ⚠️ Le bot token a été partagé en clair → **à régénérer**.
+
+**Mail / DNS (token Cloudflare temporaire — à révoquer) :**
+- Réparé : `mail.vbt-prog.com` était **proxied (cassait le mail)** → passé **DNS-only** → 24.157.140.226. Ajout SPF + DKIM pour `mcserver.vbt-prog.com`.
+- Comptes mail : `contact@vbt-prog.com`, `contact@mcserver.vbt-prog.com`, `reddit@mcserver.vbt-prog.com` (mdp dans `SGMail/.mailpw*.txt`).
+- ⚠️ **Ports 25 (in/out) et 993 bloqués** (FAI/NAT) → pas de réception/envoi externe, pas d'IMAP. Seul HTTP/443 marche. Réception Reddit impossible en self-host → utiliser Hotmail (ou relais SMTP plus tard).
+- **Webmail Roundcube déployé : `https://webmail.vbt-prog.com`** (container `roundcube` sur `sgmail_default` + `portfolio-net`, route nginx, config dans `SGMail/docker-data/roundcube/`). Seul moyen de consulter les boîtes.
+
+**Repos / branches :**
+- **SGMail** → repo GitHub **privé** `aVaBaTa/SGMail` (push). `.gitignore` élargi à `.mailpw*.txt`.
+- Branche **`live`** créée + poussée dans **SGRentMcServer** et **SGMail** (= état déployé, sans secret). SGPortfolio resté sur sa branche feature.
+- **`PARTENAIRES.md`** créé (cibles de partenariat : créateurs, communautés, écoles QC, etc.).
+
+**À FAIRE (suite demandée, non terminé) :**
+- [ ] Merger la branche SGPortfolio `Claude/feature/portfolio-release-filter` dans `live`.
+- [ ] Re-vérifier que les courriels (support) fonctionnent.
+- [ ] Créer les comptes Reddit (utiliser Hotmail pour la vérif vu le blocage entrant).
+- [ ] Révoquer le **token Cloudflare** + régénérer le **bot token Discord**.
+
 ## Backlog à traiter (demandé le 2026-06-11)
 
-- **#A — `mcserver-monitor` à REDÉPLOYER** (manuel, sudo non requis mais secret DB) :
-  build déjà fait ; recréer le container avec ses env/réseaux (cmd fournie en session).
+- ✅ **#A — `mcserver-monitor` REDÉPLOYÉ** (2026-06-11) : image `mcserver-monitor:latest`
+  rebuildée + container recréé (env `HOST_ROOT`/`DOCKER_NODES`/`MONITOR_PORT`/`DATABASE_URL`,
+  mounts docker.sock + `/`→`/host` + `secrets/ssh`, réseaux `sgportfolio_portfolio-net` +
+  `sgrentmcserver_sgrent`). Embarque la refonte #M/#C ci-dessous. Validé live.
 - ✅ **#B — Latence du ping trop élevée** — CORRIGÉ ET DÉPLOYÉ (2026-06-11) :
   1) **nginx** (`SGPortfolio/docker/nginx/nginx.conf`, bloc playrena) : nouvelle `location =
      /ping.ico` qui renvoie un 200 vide **instantanément** (aucun upstream) avec
@@ -165,13 +201,32 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
   endpoint grey-cloud nécessiterait un cert publiquement valide (Let's Encrypt) dédié.
   Leviers de **vraie** latence joueur (hors badge) : SQM/anti-bufferbloat sur le routeur,
   filaire côté serveur, et multi-région / Cloudflare Spectrum pour les joueurs distants.
-- **#C — `/admin` : « faire pour les commandes »** : à clarifier — probablement appliquer
-  la même robustesse / les actions aux commandes admin.
-- **#D — SGPortfolio : nettoyer les releases GitHub** non nommées `v0.*`
-  (`gh release list` / `gh release delete` dans le repo SGPortfolio).
-- **#E — Nouveau site « services de création de site web propulsés par IA »**, accessible
-  depuis le portfolio, **contact par courriel** (réutiliser `internal/mailer` / SGMail).
-  Gros chantier : décider repo (SGPortfolio ? nouveau ?), routing nginx, design, formulaire.
+- **#C — `/admin` : robustesse des actions container** (clarifié 2026-06-11) : appliquer
+  partout la même robustesse aux actions start/stop/restart/delete (et delete serveur) :
+  état « en cours » (bouton désactivé + spinner), gestion d'erreurs lisible, **toasts** de
+  succès/échec au lieu des `alert()`, pas de double-clic. Lié à #M (même page admin).
+  - [x] Toasts + états de chargement + désactivation des boutons pendant l'action.
+  - [x] Erreurs réseau/HTTP affichées proprement (message serveur remonté).
+- ✅ **#D — SGPortfolio : section « Téléchargements » filtrée par tag semver `v*.*.*`** (2026-06-11) :
+  - `src/lib/github.ts` : `getReleases()` filtre sur `/^v\d+\.\d+\.\d+/i` (mergé dans `live`,
+    commit `4f16e15`) → seules les releases `v<major>.<minor>.<patch>` s'affichent.
+  - `src/app/projects/[slug]/page.tsx` : bouton « Télécharger » **masqué** si le projet n'a
+    aucune release valide (`hasDownloads = releases.length > 0`) → un projet sans release
+    `v*.*.*` n'expose plus de téléchargement. Typecheck OK. ⚠️ pas encore commité.
+- 🟡 **#E — Nouveau site « SG Studio » (sites web propulsés par IA)** — MVP CODÉ (2026-06-11) :
+  - **Nouveau repo** `~/Shared_Projects/2026/SGWebStudio` (git init + commit initial sur `main`).
+    Next.js 15 standalone, Tailwind, marque/contenu centralisés dans `src/lib/site.ts`
+    (renommable en 1 fichier). Domaine cible **`studio.vbt-prog.com`**.
+  - **Landing** : hero, avantages, services, process, contact. **Formulaire de contact**
+    `POST /api/contact` → **nodemailer** vers SMTP `mailserver:587` (calque le mailer Go,
+    `tls.rejectUnauthorized:false`, honeypot anti-spam, validation). Env dans `.env.example`.
+  - **Lien depuis le portfolio** ajouté (`SGPortfolio/src/components/Header.tsx` → « SG Studio »).
+  - Build + tests de fumée OK (homepage, `/api/contact` 503 sans SMTP, 400 si email invalide).
+  - **Reste (non bloquant, à déployer)** : créer le repo GitHub `aVaBaTa/SGWebStudio` + push ;
+    DNS Cloudflare A `studio` → 24.157.140.226 (proxied) ; bloc nginx `studio.vbt-prog.com`
+    → `sgwebstudio:3000` ; `docker build` + `docker run` (réseaux `portfolio-net` +
+    `sgmail_default`, `--env-file .env` avec creds SMTP). Plus tard : visuels/réalisations,
+    grille de prix, i18n.
 - **#F — Conversion « douce » Google Ads (inscription / 1ʳᵉ création de serveur)** : en plus
   de l'achat payant (`/merci`, `AW-18226964787/7YNXCMudhLwcELPSpfND`), envoyer un événement
   de conversion **secondaire** à la création d'un serveur gratuit (ou au login Discord),
@@ -183,6 +238,65 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
   d'auth Discord). ⚠️ créer d'abord la 2ᵉ action de conversion dans le compte Google Ads.
   Aussi (lié) : la valeur de la conversion d'achat est codée en dur à 1,0 — pourra refléter
   le vrai prix du plan plus tard.
+- 🟡 **#G — Vérifier le fonctionnement des serveurs Hytale** : valider de bout en bout
+  (création → OAuth device-code → `running` → connexion joueur réelle). Lié au blocage UDP.
+  **Validé (2026-06-11) par boot réel du container `ghcr.io/terkea/hytale-server`** :
+  - ✅ L'image boote, télécharge, et atteint l'OAuth. **Les serveurs OAuth Hytale sont VIVANTS**
+    (`downloader.hytale.com` répond, device-code réel obtenu — Hytale annulé mais l'infra auth tourne).
+  - ✅ Le port **UDP se bind** côté hôte (`0.0.0.0:<base>/udp`).
+  - ✅ Le parser d'auth (`parseAuthFromLogs`) extrait **URL + code** correctement sur de **vrais logs**
+    (tests permanents `internal/server/hytale_realboot_test.go` : step 1 + step 2 + ligne « prêt »).
+  - 🐛 **Corrigé** : le parser renvoyait l'URL **nue** (`/device/verify`) au lieu de l'URL **complète**
+    (`?user_code=…`, autorisation en 1 clic) — la version nue écrasait la complète ; l'URL de MAJ
+    `downloader…zip` matchait aussi le filtre. ⇒ préférence URL-avec-code + exclusion du bruit `.zip`.
+    **Déployé** (`mcserver-api` rebuild 2026-06-11, restart=0, `/auth/discord`→307 OK).
+  - ⛔ **Non automatisable ici** : l'autorisation du device-code (step 2) exige un **compte Hytale
+    licencié** (action humaine), et la **connexion joueur réelle** dépend du **pare-feu UDP** (sudo).
+  - ⚠️ Limite connue : si l'auth échoue, l'entrypoint démarre le serveur **non authentifié** et le
+    watcher peut le passer `running` (regex « listening ») alors que les joueurs ne peuvent pas se
+    connecter. À durcir plus tard si besoin.
+- **#H — Ajouter un CI/CD** : pipeline de build/test/déploiement (GitHub Actions ?) pour les
+  repos (au moins SGRentMcServer : backend Go + frontend Next.js).
+- **#I — Faire en sorte que Satisfactory fonctionne** : connexion joueur réelle (dépend du
+  pare-feu UDP, cf. blocage connu ci-dessous) + validation bout en bout.
+- **#J — S'inspirer de la concurrence** : prendre référence sur
+  https://shockbyte.com/games/minecraft-server-hosting **et un autre site** (à choisir) pour
+  améliorer offre, UX, pricing, pages jeux.
+- **#K — Publicité dans les différents éléments** : insérer de la pub / mises en avant dans
+  les composants du site (bannières, cross-sell entre jeux, promos, etc.).
+- **#L — Mods et plugins pour Minecraft** : permettre l'ajout de mods/plugins (page `/mods`
+  actuellement placeholder « bientôt »).
+- **#M — `/admin` enrichi (multi-pages + métriques + mini-Jira)** : plus d'options dans le
+  temps + **graphiques**, passer de **une page à plusieurs** (multi-vues navigables), pouvoir
+  **supprimer / ajouter des serveurs pour des utilisateurs**, exposer **le plus de métriques
+  possible de manière digérable** (business, usage, **conversions, coûts annonces**, etc.).
+  Le `/admin` = binaire Go `cmd/monitor` (HTML embarqué `cmd/monitor/static/index.html`,
+  pkg `internal/monitor`), service séparé de l'API (Docker + DB **read**, pas d'orchestrateur).
+  Sous-tâches (mini-jira en .md tant que le board n'est pas codé) :
+  - [x] **Multi-pages / navigation** : onglets Dashboard / Serveurs / Containers / Nodes /
+        Logs / Utilisateurs (SPA, une vue affichée à la fois).
+  - [x] **Graphiques historiques** : buffer en mémoire dans le monitor (ring buffer ~échantillon
+        / 20 s sur 2 h), endpoint `GET /api/history`, courbes (CPU/RAM cluster, joueurs,
+        serveurs up). Pas de table DB (suffisant pour tendances court terme).
+  - [x] **Logs des différents nodes/containers** : endpoint `GET /api/containers/{id}/logs?tail=`
+        (via le client Docker du bon node) + viewer dans l'onglet Logs.
+  - [x] **CRUD serveurs — DELETE** : supprimer un serveur (container + ligne DB `game_servers`)
+        depuis l'admin, confirmation forte. Endpoint `POST /api/servers/{id}/delete`.
+  - [ ] **CRUD serveurs — CREATE/ré-attribution** : créer un serveur au nom d'un user →
+        nécessite l'**orchestrateur** (vit dans l'API `internal/orchestrator`, pas le monitor).
+        À câbler : soit endpoint admin sur l'API (token interne), soit le monitor importe
+        l'orchestrateur. ⚠️ ne pas faire à moitié (sinon ports/volumes/mc-router orphelins).
+  - [ ] **Mini-Jira (board tickets)** : colonnes à faire/en cours/fait, persisté en DB
+        (nouvelle table `admin_tasks`), pour remplacer ce backlog .md à terme.
+  - [ ] **Métriques business avancées** : conversions, **coûts annonces** (Google Ads),
+        revenu réel (lié #F/#P), churn, etc.
+- **#N — Visuels** : ajouter des **images de Minecraft** (et des autres jeux) sur le site.
+- **#O — Serveur communautaire / partenaires** : monter un serveur communautaire et/ou
+  **trouver des partenaires** pour héberger des serveurs.
+- **#P — Vérifier les paiements PayPal** : s'assurer que le flux de paiement PayPal
+  fonctionne de bout en bout.
+- **#Q — Plus de méthodes de paiement et de connexion** : ajouter d'autres moyens de
+  paiement et d'autres providers d'authentification (au-delà de Discord / PayPal).
 
 ## ⚠️ Blocage connu : connectivité des serveurs UDP (Satisfactory/Hytale)
 

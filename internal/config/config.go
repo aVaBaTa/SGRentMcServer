@@ -50,6 +50,9 @@ type Config struct {
 	SupportFrom string
 	SupportTo   string
 
+	// Ingestion du courrier entrant (Cloudflare Email Worker → backend → mailserver)
+	IngestSecret string
+
 	Env string
 }
 
@@ -90,6 +93,8 @@ func Load() *Config {
 		SMTPPass:    getEnv("SMTP_PASS", ""),
 		SupportFrom: getEnv("SUPPORT_FROM", "contact@mcserver.vbt-prog.com"),
 		SupportTo:   getEnv("SUPPORT_TO", "contact@mcserver.vbt-prog.com"),
+
+		IngestSecret: getEnv("INGEST_SECRET", ""),
 
 		Env: getEnv("ENV", "development"),
 	}
