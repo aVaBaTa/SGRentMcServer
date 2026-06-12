@@ -212,21 +212,25 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
     commit `4f16e15`) → seules les releases `v<major>.<minor>.<patch>` s'affichent.
   - `src/app/projects/[slug]/page.tsx` : bouton « Télécharger » **masqué** si le projet n'a
     aucune release valide (`hasDownloads = releases.length > 0`) → un projet sans release
-    `v*.*.*` n'expose plus de téléchargement. Typecheck OK. ⚠️ pas encore commité.
-- 🟡 **#E — Nouveau site « SG Studio » (sites web propulsés par IA)** — MVP CODÉ (2026-06-11) :
-  - **Nouveau repo** `~/Shared_Projects/2026/SGWebStudio` (git init + commit initial sur `main`).
+    `v*.*.*` n'expose plus de téléchargement. Commité+poussé (`live`).
+- 🟢 **#E — Nouveau site « SG Studio » (sites web propulsés par IA)** — DÉPLOYÉ CÔTÉ SERVEUR (2026-06-11) :
+  - **Nouveau repo** `~/Shared_Projects/2026/SGWebStudio` (git, branche `main`, commit initial).
     Next.js 15 standalone, Tailwind, marque/contenu centralisés dans `src/lib/site.ts`
     (renommable en 1 fichier). Domaine cible **`studio.vbt-prog.com`**.
   - **Landing** : hero, avantages, services, process, contact. **Formulaire de contact**
-    `POST /api/contact` → **nodemailer** vers SMTP `mailserver:587` (calque le mailer Go,
-    `tls.rejectUnauthorized:false`, honeypot anti-spam, validation). Env dans `.env.example`.
-  - **Lien depuis le portfolio** ajouté (`SGPortfolio/src/components/Header.tsx` → « SG Studio »).
-  - Build + tests de fumée OK (homepage, `/api/contact` 503 sans SMTP, 400 si email invalide).
-  - **Reste (non bloquant, à déployer)** : créer le repo GitHub `aVaBaTa/SGWebStudio` + push ;
-    DNS Cloudflare A `studio` → 24.157.140.226 (proxied) ; bloc nginx `studio.vbt-prog.com`
-    → `sgwebstudio:3000` ; `docker build` + `docker run` (réseaux `portfolio-net` +
-    `sgmail_default`, `--env-file .env` avec creds SMTP). Plus tard : visuels/réalisations,
-    grille de prix, i18n.
+    `POST /api/contact` → **nodemailer** vers SMTP `mailserver:587` (auth `contact@mcserver.vbt-prog.com`,
+    leads → `contact@vbt-prog.com`, honeypot anti-spam, validation). `.env` (gitignored) en place.
+  - **Container `sgwebstudio`** up (image `sgwebstudio:latest`, réseaux `sgportfolio_portfolio-net`
+    + `sgmail_default`, `--restart unless-stopped`).
+  - **nginx** : bloc 443 `studio.vbt-prog.com` → `sgwebstudio:3000` + ajout au redirect 80
+    (`SGPortfolio/docker/nginx/nginx.conf`, restart `portfolio-nginx`, `nginx -t` OK).
+  - **Lien depuis le portfolio** (`Header.tsx` → « SG Studio »).
+  - ✅ **Validé en e2e via l'origine** (Host header) : homepage OK + **envoi réel du formulaire
+    de contact `{"ok":true}`** (courriel livré). SGPortfolio + nginx commités/poussés sur `live`.
+  - **RESTE (action utilisateur)** : (1) **DNS Cloudflare** A `studio` → 24.157.140.226 (proxied)
+    — sans ça `https://studio.vbt-prog.com` ne résout pas encore ; (2) **créer le repo GitHub
+    `aVaBaTa/SGWebStudio`** (vide) puis `git push -u origin main` (remote déjà configuré ;
+    `gh` absent sur la machine). Plus tard : visuels/réalisations, grille de prix, i18n.
 - **#F — Conversion « douce » Google Ads (inscription / 1ʳᵉ création de serveur)** : en plus
   de l'achat payant (`/merci`, `AW-18226964787/7YNXCMudhLwcELPSpfND`), envoyer un événement
   de conversion **secondaire** à la création d'un serveur gratuit (ou au login Discord),
