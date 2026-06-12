@@ -4,3 +4,4 @@ bin/
 CREDENTIALS.md
 secrets/
 /monitor
+seeds/

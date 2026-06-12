@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -133,7 +135,49 @@ func (s *Server) buildSpec(gs *servers.GameServer, gameDef servers.GameDef, plan
 		spec.RouterHost = gs.Subdomain + "." + s.cfg.ServersDomain
 		spec.RouterPort = gameDef.RouterPort
 	}
+	// Si les fichiers de jeu pré-téléchargés sont disponibles, on désactive le
+	// téléchargement (et son OAuth) dans le container : le volume sera seedé avant
+	// le start (cf. provisionServer / seedServer). Dernière occurrence = celle qui
+	// gagne côté Docker, donc ces overrides priment sur l'env du jeu.
+	if s.seedReady(gameDef) {
+		spec.EnvVars = append(spec.EnvVars, "AUTO_DOWNLOAD=false", "SKIP_DOWNLOAD=true")
+	}
 	return spec
+}
+
+// seedDir retourne le dossier des fichiers pré-téléchargés d'un jeu, ou "" si non configuré.
+func (s *Server) seedDir(gameID string) string {
+	if s.cfg.SeedDir == "" {
+		return ""
+	}
+	return filepath.Join(s.cfg.SeedDir, gameID)
+}
+
+// seedReady : tous les SeedFiles du jeu existent sous <SeedDir>/<game>/. Si oui, on
+// seede le volume au lieu de laisser le container télécharger (Hytale).
+func (s *Server) seedReady(gameDef servers.GameDef) bool {
+	dir := s.seedDir(gameDef.ID)
+	if dir == "" || len(gameDef.SeedFiles) == 0 {
+		return false
+	}
+	for _, f := range gameDef.SeedFiles {
+		if st, err := os.Stat(filepath.Join(dir, f)); err != nil || st.IsDir() || st.Size() == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// seedServer copie les fichiers de jeu pré-téléchargés dans le volume du container
+// (créé mais pas encore démarré). À appeler entre CreateServer et StartServer.
+func (s *Server) seedServer(ctx context.Context, node *orchestrator.Node, containerID string, gameDef servers.GameDef) error {
+	dir := s.seedDir(gameDef.ID)
+	for _, f := range gameDef.SeedFiles {
+		if err := node.CopyFileToContainer(ctx, containerID, filepath.Join(dir, f), gameDef.DataPath); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // provisionServer crée et démarre le container en arrière-plan.
@@ -163,6 +207,19 @@ func (s *Server) provisionServer(gs *servers.GameServer, game string, port int, 
 	}
 	s.serverRepo.UpdateContainerID(ctx, gs.ID, containerID)
 	gs.ContainerID = containerID
+
+	// Seed des fichiers de jeu pré-téléchargés dans le volume AVANT le start (Hytale) :
+	// le container saute le téléchargement (et son OAuth downloader). Le client n'aura
+	// que l'auth SERVEUR à faire. Si le seed échoue, on stoppe (AUTO_DOWNLOAD=false →
+	// le container ne pourrait pas récupérer les fichiers seul).
+	if s.seedReady(gameDef) {
+		if err := s.seedServer(ctx, node, containerID, gameDef); err != nil {
+			slog.Error("provision: seed failed", "id", gs.ID, "err", err)
+			s.serverRepo.UpdateStatus(ctx, gs.ID, "error")
+			return
+		}
+		slog.Info("provision: volume seedé avec fichiers pré-téléchargés", "id", gs.ID, "game", game)
+	}
 
 	if err := node.StartServer(ctx, containerID); err != nil {
 		slog.Error("provision: start container failed", "id", gs.ID, "err", err)

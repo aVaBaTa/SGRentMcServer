@@ -56,9 +56,13 @@ services:
       SUPPORT_FROM: contact@mcserver.vbt-prog.com
       SUPPORT_TO: contact@mcserver.vbt-prog.com
       INGEST_SECRET: ${INGEST_SECRET}
+      # Fichiers de jeu pré-téléchargés (Hytale) seedés dans chaque volume avant le start.
+      SEED_DIR: /seeds
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./secrets/ssh:/etc/sgrent-ssh:ro
+      # Fichiers pré-téléchargés (cf. scripts/hytale-seed). Lecture seule. Gitignored.
+      - ./seeds:/seeds:ro
     networks:
       - sgrent
       - portfolio-net

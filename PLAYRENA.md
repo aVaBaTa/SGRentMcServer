@@ -3,11 +3,11 @@
 > Fichier de reprise rapide. Mentionne **« Playrena »** dans une nouvelle conversation
 > (le skill `playrena` charge ce fichier + l'état git) OU dis simplement
 > **« va lire PLAYRENA.md »**.
-> Dernière mise à jour : 2026-06-11.
+> Dernière mise à jour : 2026-06-12.
 
 ## 🔄 Reprise rapide (à exécuter au début d'une nouvelle conversation)
 
-1. Lire ce fichier en entier (archi, état des jeux, **backlog #A→#F**, blocage UDP).
+1. Lire ce fichier en entier (archi, état des jeux, **backlog #A→#T**, blocage UDP).
 2. Récupérer les **commits récents des 3 repos** (SGRentMcServer travaille sur **`live`**) :
 
 ```bash
@@ -213,7 +213,7 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
   - `src/app/projects/[slug]/page.tsx` : bouton « Télécharger » **masqué** si le projet n'a
     aucune release valide (`hasDownloads = releases.length > 0`) → un projet sans release
     `v*.*.*` n'expose plus de téléchargement. Commité+poussé (`live`).
-- 🟢 **#E — Nouveau site « SG Studio » (sites web propulsés par IA)** — DÉPLOYÉ CÔTÉ SERVEUR (2026-06-11) :
+- ✅ **#E — Nouveau site « SG Studio » (sites web propulsés par IA)** — EN LIGNE (2026-06-12) :
   - **Nouveau repo** `~/Shared_Projects/2026/SGWebStudio` (git, branche `main`, commit initial).
     Next.js 15 standalone, Tailwind, marque/contenu centralisés dans `src/lib/site.ts`
     (renommable en 1 fichier). Domaine cible **`studio.vbt-prog.com`**.
@@ -227,10 +227,13 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
   - **Lien depuis le portfolio** (`Header.tsx` → « SG Studio »).
   - ✅ **Validé en e2e via l'origine** (Host header) : homepage OK + **envoi réel du formulaire
     de contact `{"ok":true}`** (courriel livré). SGPortfolio + nginx commités/poussés sur `live`.
-  - **RESTE (action utilisateur)** : (1) **DNS Cloudflare** A `studio` → 24.157.140.226 (proxied)
-    — sans ça `https://studio.vbt-prog.com` ne résout pas encore ; (2) **créer le repo GitHub
-    `aVaBaTa/SGWebStudio`** (vide) puis `git push -u origin main` (remote déjà configuré ;
-    `gh` absent sur la machine). Plus tard : visuels/réalisations, grille de prix, i18n.
+  - ✅ **DNS Cloudflare** A/AAAA `studio` → Cloudflare (proxied) : `https://studio.vbt-prog.com`
+    répond **200 en public**, contenu OK.
+  - ✅ **Repo GitHub `aVaBaTa/SGWebStudio`** (privé) créé via l'API (token `repo` du portfolio)
+    + `git push -u origin main` (scaffold + budget 300–1200 $). Remote `git@github.com:aVaBaTa/SGWebStudio.git`.
+  - ✅ Budget formulaire ajusté à **300–1200 $**. Portfolio **rebuildé** (lien « SG Studio » live).
+  - **Plus tard (cf. `SGPortfolio/PORTFOLIO.md`)** : **refonte visuelle (plus beau + original)**,
+    visuels/réalisations, grille de prix, i18n. Doc dédié = `SGWebStudio` + voir PORTFOLIO.md.
 - **#F — Conversion « douce » Google Ads (inscription / 1ʳᵉ création de serveur)** : en plus
   de l'achat payant (`/merci`, `AW-18226964787/7YNXCMudhLwcELPSpfND`), envoyer un événement
   de conversion **secondaire** à la création d'un serveur gratuit (ou au login Discord),
@@ -301,6 +304,71 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
   fonctionne de bout en bout.
 - **#Q — Plus de méthodes de paiement et de connexion** : ajouter d'autres moyens de
   paiement et d'autres providers d'authentification (au-delà de Discord / PayPal).
+- **#R — Étudier un modèle « mining de serveurs » rémunéré (hébergement distribué)** :
+  évaluer la faisabilité d'un réseau où des **particuliers prêtent leur machine** (CPU/RAM/
+  bande passante) pour héberger des serveurs de jeu Playrena et sont **rémunérés** en retour
+  (modèle type Salad / Honeygain / pool de hosting communautaire). À creuser :
+  - **Technique** : agent à installer chez le contributeur (Docker + tunnel sortant pour
+    contourner NAT/CGNAT, ex. WireGuard/FRP/Cloudflare Tunnel ; **le jeu UDP ne passe pas par
+    CF** → vrai défi réseau), orchestrateur multi-node (l'archi `internal/orchestrator` gère
+    déjà node1+node2 via socket/SSH → étendre à N nodes non fiables), placement/healthcheck,
+    isolation/sécurité (on exécute du code chez des tiers et inversement).
+  - **Économique** : payer les contributeurs (combien/Go/h ?), vs coût d'un VPS ; le gain =
+    capacité élastique sans capex (utile justement pour gros pics Hytale, cf. #S).
+  - **Confiance/abus** : latence variable, uptime non garanti, triche/vol de données, fiscalité.
+  - **Verdict attendu** : probablement un **gros projet R&D** ; commencer par une note de
+    faisabilité (1 page) avant tout code. Lié à #O (partenaires) et #S (capacité événementielle).
+  - ✅ **Note de faisabilité écrite : `docs/mining-feasibility.md`** (verdict : faisable mais
+    gros R&D + économie douteuse pour du temps réel → préférer cloud à l'heure #S + nodes
+    partenaires de confiance #O via l'orchestrateur existant ; ne pas coder maintenant).
+- **#S — Capturer la clientèle Hytale (loss-leader) + sponsoring YouTubers events** : décision
+  produit assumée par Simon. 📄 **Analyse complète : `docs/hytale-analyse-marche.md`** (marché,
+  éco hosting, RAM, events, anti-DDoS, reco). **Aller chercher les joueurs Hytale même à perte** (prix très bas
+  ou gratuit) pour la croissance/notoriété, puis **démarcher des YouTubers/streamers** qui
+  organisent des **events 100 joueurs** en leur offrant la **location de serveurs 25/50/100
+  joueurs en échange de sponso/visibilité**. ⚠️ **Contraintes dures à intégrer (cf. mini-étude
+  2026-06-11)** :
+  - **Matériel** : `xe80dell` = **31 Go RAM total (~21 Go libres)**, 48 cœurs. Hytale =
+    plancher 4 Go + **~1 Go/joueur** ⇒ 25 j ≈ 25 Go (déjà > RAM libre), 50 j ≈ 50 Go, 100 j
+    ≈ 100 Go. **La machine actuelle ne peut PAS héberger un 25/50/100 joueurs Hytale.**
+  - **Voie réaliste pour les events** : **cloud à l'heure** provisionné par event, PAS sur
+    xe80dell, PAS de dédié mensuel (MAU Hytale en baisse → serveurs vides entre events).
+    **Chiffrage (2026-06-12)** — Hetzner Cloud, facturé à l'heure plafonné au mois :
+    CCX33 32 Go **0,10 €/h** (~25 j) · CCX43 64 Go **0,20 €/h** (~50 j) · CCX53 **128 Go
+    0,40 €/h** (~100 j) · CCX63 192 Go 0,60 €/h. ⇒ **un event 100 joueurs de 5 h ≈ 2 €**,
+    24 h ≈ 9,60 €, week-end ≈ 20 €. **Le serveur n'est pas le coût** — le vrai livrable est
+    l'**automatisation** spin-up/tear-down via API (louer → Docker + image Hytale → auth + DNS
+    → détruire). Dédié mensuel seulement si demande récurrente (Hetzner AX102 128 Go ~119 €/mo,
+    auction 50-90 €/mo, OVH Scale dès ~513 $/mo). **Latence** : OVH **Beauharnois (Montréal)**
+    pour audience QC/FR ; Hetzner EU/US-East sinon. Le « mining » #R = autre voie d'élasticité.
+  - **Sur xe80dell** : ne viser que des **petits Hytale (4–8 Go, 4–15 joueurs)** comme funnel
+    gratuit/à bas prix.
+  - **Marché (signaux mitigés)** : ✅ lancement énorme (Twitch 420 k peak, 1 M mods en 48 h,
+    Hypixel financé ~2 ans), modding fort = serveurs gourmands = valeur de location ; ⚠️ **MAU
+    déjà en baisse** (~740 k, **-13,6 % m/m** — hype qui refroidit), prix plancher ~0 (self-host
+    gratuit + tiers gratuits 20 slots), marché saturé de **partenaires officiels** (Apex,
+    Shockbyte, Pingperfect), latence mono-région défavorable.
+  - **À livrer** : (1) liste de YouTubers/streamers Hytale events FR+EN à démarcher, (2) offre
+    sponso type, (3) chiffrage VPS event, (4) page/offre « events » sur le site.
+    ✅ (1)+(2) **faits** : section **`PARTENAIRES.md` §1.bis** (cibles Hytale events + offre type).
+    ✅ (3) **fait** : chiffrage ci-dessus + **POC de provisioning `scripts/event-server/`**
+    (provision.sh/destroy.sh + cloud-init ; ~2-10 €/event ; **non testé live** — besoin d'un
+    token Hetzner). [ ] (4) page « events » sur le site = reste à faire.
+    **Avant tout démarchage** : valider qu'on peut *techniquement* livrer un 100 joueurs (lancer
+    le POC avec un vrai token Hetzner) — ne pas promettre ce qu'on ne peut pas tenir.
+- **#T — Anti-DDoS (protection + masquage de l'IP d'origine)** : aujourd'hui le trafic de jeu
+  tape l'**IP résidentielle d'origine** (Cloudflare ne proxifie pas l'UDP/TCP de jeu) → une
+  attaque peut **couper Internet de toute la maison**. Risque réel à mitiger. Pistes :
+  - **Minecraft (TCP)** : **TCPShield** (plan gratuit) — proxy qui absorbe les attaques et
+    **cache l'IP d'origine** ; s'intègre via le hostname mc-router. Le plus rentable, à faire en 1er.
+  - **Jeux UDP (Satisfactory/Hytale)** : pas de proxy gratuit → s'appuyer sur la **protection
+    niveau hébergeur** quand on est sur cloud (**OVH = anti-DDoS Game inclus gratuitement**,
+    Hetzner = protection de base incluse). Argument de plus pour faire les events sur OVH/Hetzner
+    plutôt qu'à la maison.
+  - **Option payante** : **Cloudflare Spectrum** (proxy TCP/UDP brut, masque l'origine) — cher
+    (enterprise), à garder pour plus tard / gros clients.
+  - **Court terme maison** : au minimum, ne JAMAIS exposer l'IP résidentielle pour des events
+    publics ; passer par un VPS relais. Lié à #S (cloud) et #R (nodes distribués).
 
 ## ⚠️ Blocage connu : connectivité des serveurs UDP (Satisfactory/Hytale)
 

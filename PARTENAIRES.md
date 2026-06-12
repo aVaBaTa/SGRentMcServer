@@ -30,6 +30,23 @@
 
 ---
 
+## 1.bis Créateurs Hytale — events 25/50/100 joueurs (sponsoring) — priorité HAUTE (fenêtre courte)
+> **Stratégie #S** : offrir gratuitement un **serveur d'event 25/50/100 joueurs** (hébergé sur **cloud loué à l'heure**, ~2-10 €/event, cf. PLAYRENA.md #S) en échange d'une **mention/lien/sponso**. ⚠️ Fenêtre : Hytale est hype mais la **MAU baisse (-13,6 %/mois)** → bouger **vite**. ⚠️ **Pré-requis** : avoir testé le POC cloud (livrable 2) AVANT de promettre un 100 joueurs.
+> **Réalisme** : viser surtout des **créateurs mid-tier (50k-1M)** qui organisent vraiment des events multijoueurs — meilleur taux de réponse que les méga-chaînes. Les gros (>3M) = aspirationnel, viser après une 1ʳᵉ preuve sociale.
+
+| Statut | Cible / type | Plateforme | Pourquoi eux | Notes |
+|---|---|---|---|---|
+| [ ] | Créateurs MC "event/SMP" passés à Hytale (mid-tier) | YouTube | Font déjà des events 50-200 joueurs, transfèrent vers Hytale | ex. style camman18, Socksfor2, Logdotzip, Fuze III, AntVenom — **vérifier qui fait réellement des events Hytale** |
+| [ ] | Streamers Hytale Twitch (montants) | Twitch | Audience Hytale active, format event live | repérer via twitchtracker.com /games Hytale, cibler 1k-30k viewers |
+| [ ] | Organisateurs d'events communautaires Hytale | Discord | Cherchent justement un host gratuit pour leurs events | chercher serveurs Discord "Hytale events / SMP" |
+| [ ] | Micro-créateurs Hytale FR/QC | YouTube/Twitch/TikTok | Proximité, accessibles, local | angle "serveur d'event gratuit fait au QC" |
+
+**Offre type (event) :** « Je t'héberge **gratuitement** ton serveur d'event Hytale **jusqu'à 100 joueurs** (machine dédiée louée pour l'occasion, anti-lag), en échange d'une **mention + lien Playrena** en description/au stream. Je m'occupe de tout le technique. »
+
+**Action :** (1) dresser 15-20 créateurs Hytale qui font des events (vérifier qu'ils en font *vraiment*), (2) noter mail pro / DM, (3) ne contacter qu'**après** le POC cloud validé.
+
+---
+
 ## 2. Communautés & serveurs Discord Minecraft — priorité HAUTE
 > Partenariat croisé : mention mutuelle, salon partenaire, serveur démo Playrena hébergé gratuitement pour eux.
 

@@ -39,6 +39,13 @@ type Config struct {
 	ServersDomain string // ex: servers.vbt-prog.com (pour mc-router hostname)
 	MCNetwork     string // réseau Docker partagé avec mc-router
 
+	// SeedDir : dossier (monté dans le container API) contenant les fichiers de jeu
+	// pré-téléchargés, par jeu : <SeedDir>/<gameID>/<fichier>. Ex. Hytale :
+	// <SeedDir>/hytale/{HytaleServer.jar,Assets.zip}. Évite le re-téléchargement (et
+	// son OAuth downloader) à chaque création — le volume est seedé avant le start.
+	// Vide → comportement historique (le container télécharge lui-même).
+	SeedDir string
+
 	MCRouterAPI string            // ex: http://mc-router:26666
 	NodeAddrs   map[string]string // IP LAN par node pour le routing (node1=10.0.0.2,...)
 
@@ -84,6 +91,7 @@ func Load() *Config {
 		DockerNodes:   parseNodes(getEnv("DOCKER_NODES", "node1=unix:///var/run/docker.sock")),
 		ServersDomain: getEnv("SERVERS_DOMAIN", "servers.vbt-prog.com"),
 		MCNetwork:     getEnv("MC_NETWORK", "mc-net"),
+		SeedDir:       getEnv("SEED_DIR", "/seeds"),
 		MCRouterAPI:   getEnv("MC_ROUTER_API", "http://mc-router:26666"),
 		NodeAddrs:     parseKV(getEnv("NODE_ADDRS", "node1=10.0.0.2,node2=10.0.0.110")),
 

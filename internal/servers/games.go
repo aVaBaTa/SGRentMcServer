@@ -40,6 +40,13 @@ type GameDef struct {
 	MinRAMMb    int64
 	MinCPUCores float64
 
+	// SeedFiles : fichiers de jeu pré-téléchargés à injecter dans le volume avant
+	// le 1er démarrage (depuis <SeedDir>/<ID>/<fichier> vers <DataPath>/<fichier>).
+	// Permet de réutiliser un téléchargement local (Hytale) au lieu de re-télécharger
+	// — et donc d'éviter l'OAuth "downloader" à chaque création. Le client n'a plus
+	// que l'auth SERVEUR à faire. Si les fichiers sont absents → repli sur download.
+	SeedFiles []string
+
 	// Ports retourne les bindings à publier pour un port de base alloué.
 	Ports func(basePort int) []PortMapping
 	// Env construit les variables d'environnement du container. basePort permet
@@ -99,9 +106,12 @@ var games = map[string]GameDef{
 		Image:        "ghcr.io/terkea/hytale-server:latest",
 		DataPath:     "/data",
 		UsesMCRouter: false, // QUIC/UDP, pas de routing par hostname → IP:port direct
-		NeedsAuth:    true,  // double OAuth interactif au 1er démarrage (cf. handlers_auth.go)
-		MinRAMMb:     4096,  // serveur Java 25, minimum jouable (offert pour l'instant)
+		NeedsAuth:    true,  // auth SERVEUR interactive faite par le CLIENT (device-code)
+		MinRAMMb:     10240, // 10 Go : plancher réaliste/stable (4 Go crashe sous charge)
 		MinCPUCores:  2.0,
+		// Fichiers de jeu pré-téléchargés sur l'hôte (cf. scripts/hytale-seed) →
+		// réutilisés à chaque création : pas de re-download ni d'OAuth downloader.
+		SeedFiles: []string{"HytaleServer.jar", "Assets.zip"},
 		Ports: func(base int) []PortMapping {
 			// Un seul port UDP (QUIC). On configure le serveur pour écouter sur
 			// le port alloué (SERVER_PORT), mapping identité hôte == interne.

@@ -1,10 +1,13 @@
 package orchestrator
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/docker/docker/api/types/container"
@@ -100,6 +103,47 @@ func (n *Node) CreateServer(ctx context.Context, spec ServerSpec) (string, error
 		return "", fmt.Errorf("create container: %w", err)
 	}
 	return resp.ID, nil
+}
+
+// CopyFileToContainer copie un fichier de l'hôte (API) dans le container, sous destDir.
+// Utilisé pour seeder un volume avec des fichiers de jeu pré-téléchargés AVANT le
+// démarrage (cf. GameDef.SeedFiles). Fonctionne sur node local ou distant (le client
+// Docker transporte le flux). On stream via tar + io.Pipe (pas de gros buffer mémoire,
+// Assets.zip peut peser lourd).
+func (n *Node) CopyFileToContainer(ctx context.Context, containerID, hostPath, destDir string) error {
+	f, err := os.Open(hostPath)
+	if err != nil {
+		return fmt.Errorf("open seed %s: %w", hostPath, err)
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat seed %s: %w", hostPath, err)
+	}
+
+	pr, pw := io.Pipe()
+	go func() {
+		tw := tar.NewWriter(pw)
+		hdr := &tar.Header{
+			Name: filepath.Base(hostPath),
+			Mode: 0o644,
+			Size: fi.Size(),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		if _, err := io.Copy(tw, f); err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		pw.CloseWithError(tw.Close()) // nil si OK → EOF propre
+	}()
+
+	if err := n.cli.CopyToContainer(ctx, containerID, destDir, pr, container.CopyToContainerOptions{}); err != nil {
+		return fmt.Errorf("copy %s → %s: %w", hostPath, destDir, err)
+	}
+	return nil
 }
 
 // UpdateResources change les limites RAM/CPU d'un container à chaud (upgrade/downgrade).
