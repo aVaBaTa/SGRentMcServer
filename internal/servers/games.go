@@ -1,6 +1,9 @@
 package servers
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // satisfactoryMsgOffset : décalage entre le port de base (jeu) et le port
 // "reliable messaging" de Satisfactory. La plage des ports de base s'arrête à
@@ -128,6 +131,16 @@ func GetGame(id string) (GameDef, error) {
 		return GameDef{}, fmt.Errorf("unknown game %q", id)
 	}
 	return g, nil
+}
+
+// GameIDs retourne les identifiants de jeux disponibles (ordre stable).
+func GameIDs() []string {
+	ids := make([]string, 0, len(games))
+	for id := range games {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // minecraftEnv : config pour l'image itzg/minecraft-server.

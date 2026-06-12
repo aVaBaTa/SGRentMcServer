@@ -75,6 +75,13 @@ func (s *Server) mountRoutes() {
 		r.Post("/support", s.handleSupport)
 		r.Post("/mail/ingest", s.handleMailIngest) // Cloudflare Email Worker → livraison locale (protégé par secret)
 
+		// --- Routes admin internes (monitor /admin → API, protégées par X-Admin-Token) ---
+		r.Route("/admin", func(r chi.Router) {
+			r.Get("/catalog", s.handleAdminCatalog)
+			r.Post("/servers", s.handleAdminCreateServer)
+			r.Post("/users/{id}/unlimited", s.handleAdminSetUnlimited)
+		})
+
 		// --- Routes authentifiées ---
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(s.cfg.JWTSecret))

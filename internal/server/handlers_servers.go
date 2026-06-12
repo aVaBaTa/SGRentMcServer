@@ -33,9 +33,29 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+	// Droit "création illimitée" : seul un user qui a ce droit peut créer
+	// directement un serveur sur un plan PAYANT sans paiement. Sinon le plan
+	// demandé est ramené à "free" (le passage payant se fait ensuite via le
+	// checkout PayPal qui upgrade le serveur).
+	allowPaid := false
+	if u, err := s.userRepo.GetByID(r.Context(), claims.UserID); err == nil {
+		allowPaid = u.UnlimitedCreate
+	}
+
+	gs, status, err := s.createServerForUser(r.Context(), claims.UserID, claims.Username, req, allowPaid)
+	if err != nil {
+		http.Error(w, err.Error(), status)
 		return
+	}
+	respond(w, http.StatusCreated, gs)
+}
+
+// createServerForUser = cœur partagé de la création de serveur (utilisé par le
+// handler utilisateur ET par l'admin). allowPaid=false force un plan payant vers
+// "free". Retourne le serveur, un code HTTP (en cas d'erreur) et l'erreur.
+func (s *Server) createServerForUser(ctx context.Context, userID, username string, req createServerRequest, allowPaid bool) (*servers.GameServer, int, error) {
+	if req.Name == "" {
+		return nil, http.StatusBadRequest, fmt.Errorf("name is required")
 	}
 	if req.Game == "" {
 		req.Game = "minecraft"
@@ -49,14 +69,17 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 
 	gameDef, err := servers.GetGame(req.Game)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, http.StatusBadRequest, err
 	}
 
 	plan, err := servers.GetPlan(req.Plan)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, http.StatusBadRequest, err
+	}
+	// Garde paiement : un plan payant non autorisé est ramené à "free".
+	if !plan.Free && !allowPaid {
+		plan, _ = servers.GetPlan("free")
+		req.Plan = plan.Name
 	}
 
 	// Plancher de ressources par jeu : un serveur Satisfactory tourne en 4 Go
@@ -64,26 +87,22 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	// facturation restent inchangés ; seules les ressources réelles sont relevées.
 	ramMb, cpuCores := gameDef.ApplyFloor(plan.RAMMb, plan.CPUCores)
 
-	// Choisir le meilleur node
-	node, err := s.orch.BestNode(r.Context(), ramMb)
+	node, err := s.orch.BestNode(ctx, ramMb)
 	if err != nil {
 		slog.Error("no available node", "err", err)
-		http.Error(w, "no capacity available, try again later", http.StatusServiceUnavailable)
-		return
+		return nil, http.StatusServiceUnavailable, fmt.Errorf("no capacity available, try again later")
 	}
 
-	// Port disponible
-	port, err := servers.NextAvailablePort(r.Context(), s.db)
+	port, err := servers.NextAvailablePort(ctx, s.db)
 	if err != nil {
 		slog.Error("no available port", "err", err)
-		http.Error(w, "no available port", http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError, fmt.Errorf("no available port")
 	}
 
-	subdomain := s.uniqueSubdomain(r.Context(), claims.Username, req.Name)
+	subdomain := s.uniqueSubdomain(ctx, username, req.Name)
 
 	gs := &servers.GameServer{
-		UserID:    claims.UserID,
+		UserID:    userID,
 		Name:      req.Name,
 		Subdomain: subdomain,
 		Game:      req.Game,
@@ -96,18 +115,15 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		Port:      port,
 	}
 
-	if err := s.serverRepo.Create(r.Context(), gs); err != nil {
+	if err := s.serverRepo.Create(ctx, gs); err != nil {
 		slog.Error("failed to save server", "err", err)
-		http.Error(w, "database error", http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError, fmt.Errorf("database error")
 	}
 
 	// La création du container (pull image + start) peut prendre plusieurs
-	// minutes. On répond immédiatement (statut "creating") et on provisionne
-	// en arrière-plan ; le dashboard poll le statut.
+	// minutes. On provisionne en arrière-plan ; le dashboard poll le statut.
 	go s.provisionServer(gs, req.Game, port, subdomain, plan)
-
-	respond(w, http.StatusCreated, gs)
+	return gs, http.StatusCreated, nil
 }
 
 // buildSpec assemble le ServerSpec à partir de la définition du jeu. Les

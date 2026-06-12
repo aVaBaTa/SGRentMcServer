@@ -87,7 +87,7 @@ décide quand pusher. Convention de branche imposée : `Claude/feature/<desc>` (
 |---|---|---|---|---|---|
 | **Minecraft** | ✅ live | `itzg/minecraft-server` | 25565/tcp (mc-router par hostname) | `/data` | versions PAPER, RCON (console/joueurs), gratuit dès 1 Go |
 | **Satisfactory** | ✅ live | `wolveix/satisfactory-server` | base/udp (jeu) + base+500/tcp (messaging), identité | `/config` | plancher **4 Go gratuit** (promo), IP:port direct, pas de RCON |
-| **Hytale** | ✅ live | `ghcr.io/terkea/hytale-server` | base/udp (QUIC, `SERVER_PORT`) | `/data` | plancher **4 Go gratuit**, **OAuth device-code au 1er boot** (statut `auth_required`, panel affiche URL+code), IP:port direct |
+| **Hytale** | ✅ live | `ghcr.io/terkea/hytale-server` | base/udp (QUIC, `SERVER_PORT`) | `/data` | plancher **10 Go** (réaliste, assumé non rentable), **fichiers pré-téléchargés** (seed → pas de re-download) → le **client** ne fait que l'**auth serveur** (device-code, panel affiche URL+code), IP:port direct |
 | Rust, ARK | ⏳ soon | — | — | — | marqués « Bientôt » dans `games.ts` |
 
 **Flux d'auth Hytale** (`internal/server/handlers_auth.go`) : à la 1ʳᵉ création, un watcher
@@ -95,8 +95,17 @@ détaché lit les logs, détecte le prompt OAuth Hytale (`oauth.accounts.hytale.
 statut à `auth_required`, expose `GET /servers/{id}/auth` (URL+code), puis `running` une fois
 autorisé. Creds persistés dans le volume → redémarrages auto.
 
-**Promo prix** : Satisfactory & Hytale sont **offerts gratuitement pour l'instant** (plancher
-4 Go appliqué quel que soit le plan choisi, facturation = 0 $), pour attirer des clients.
+**Seed Hytale (fichiers pré-téléchargés)** : pour éviter le re-download (et son OAuth downloader)
+à chaque création, les fichiers de jeu sont **téléchargés une fois** sur l'hôte
+(`scripts/hytale-seed/download.sh`, OAuth downloader fait UNE fois par l'admin) et stockés dans
+`seeds/hytale/`. Le backend (`SEED_DIR=/seeds`, `GameDef.SeedFiles`) **seede le volume**
+(`CopyFileToContainer`) avec `AUTO_DOWNLOAD=false` AVANT le start → le serveur démarre direct sur
+l'**auth serveur**, que le **client** complète via le panel. Repli automatique sur download si le
+seed est absent. (cf. `scripts/hytale-seed/README.md`).
+
+**Promo prix** : Satisfactory **offert** (plancher 4 Go, facturation = 0 $). **Hytale** : plancher
+relevé à **10 Go** (2026-06-12, réaliste/stable) — décision produit assumée **non rentable** (cf.
+`docs/hytale-analyse-marche.md`) ; ~1 serveur à la fois sur xe80dell.
 
 ## Déploiement (sur xe80dell)
 
@@ -180,6 +189,42 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
 - [ ] Re-vérifier que les courriels (support) fonctionnent.
 - [ ] Créer les comptes Reddit (utiliser Hotmail pour la vérif vu le blocage entrant).
 - [ ] Révoquer le **token Cloudflare** + régénérer le **bot token Discord**.
+
+## ✅ Session 2026-06-12 — Hytale jouable (seed + 10 Go) + étude de marché
+
+**Hytale rendu fonctionnel selon décision produit de Simon** (« je veux que Hytale fonctionne,
+10 Go par serveur même si pas rentable, le client fait lui-même l'auth, mais le serveur déjà
+téléchargé sur ma machine ») :
+- **Plancher 10 Go** (`internal/servers/games.go`, `MinRAMMb: 10240`) — 4 Go crashe sous charge.
+- **Le client fait l'auth SERVEUR** (device-code) via le panel — comportement déjà en place (watcher).
+- **Fichiers de jeu pré-téléchargés (seed)** → plus de re-download ni d'OAuth downloader à chaque
+  création. Mécanique :
+  - `GameDef.SeedFiles` (Hytale = `HytaleServer.jar` + `Assets.zip`) + config `SEED_DIR` (`/seeds`).
+  - `Node.CopyFileToContainer` (`internal/orchestrator/container.go`) : injecte les fichiers dans
+    le volume **avant le start** (stream tar, marche aussi sur node2 SSH).
+  - `provisionServer`/`buildSpec` (`internal/server/handlers_servers.go`) : si seed présent →
+    `AUTO_DOWNLOAD=false` + copie → le serveur boote direct sur l'auth serveur. **Repli auto** sur
+    download si seed absent (rien ne casse).
+  - `docker-compose.yml` : montage `./seeds:/seeds:ro` + `SEED_DIR=/seeds`. `seeds/` gitignored.
+  - Script one-time `scripts/hytale-seed/download.sh` (+ README) : télécharge une fois (OAuth
+    downloader fait UNE fois par l'admin) → `seeds/hytale/`.
+- **Déployé** : `mcserver-api` rebuild (restart=0, `/seeds` monté, `SEED_DIR` OK). Build + tests verts.
+- ⚠️ **Capacité xe80dell** : 10 Go + overhead (~+50 % → ~15 Go cgroup) sur 31 Go total (≈10 Go déjà
+  pris) ⇒ réaliste **1 serveur Hytale à la fois**. Assumé (non rentable).
+
+**Reste à faire (actions de Simon — compte/ routeur) :**
+- [ ] Lancer **une fois** `./scripts/hytale-seed/download.sh` (compte Hytale licencié) → remplit `seeds/hytale/`.
+- [ ] **Connectivité UDP** : NAT routeur (+ pare-feu) pour la plage `25566:26565/udp`. ⚠️ Docker
+  publie déjà le port en contournant `ufw` → le maillon manquant est surtout le **forward routeur**,
+  pas « juste un reload ufw ».
+- [ ] Tester création serveur Hytale → doit démarrer direct sur l'auth serveur (sans étape download).
+- [ ] (Frontend/marketing) refléter le plancher **10 Go** Hytale (pages `/games/hytale`, `PLANS` si besoin).
+
+**Étude de marché Hytale (réflexion consignée) :** `docs/hytale-analyse-marche.md` (verdict : payant
+non rentable — produit gratuit en self-host, marché saturé, plancher RAM non-surbookable ; mais
+demande réelle → **vitrine + events sponsorisés sur cloud à l'heure** ~2-10 €/event). Voir aussi
+backlog **#S** (events + sponsoring YouTubers), **#R** (mining `docs/mining-feasibility.md`),
+**#T** (anti-DDoS). Cibles créateurs : `PARTENAIRES.md` §1.bis. POC cloud : `scripts/event-server/`.
 
 ## Backlog à traiter (demandé le 2026-06-11)
 
@@ -289,10 +334,17 @@ Domaine public = **`https://playrena.vbt-prog.com`** (Option 1 : sous-domaine de
         (via le client Docker du bon node) + viewer dans l'onglet Logs.
   - [x] **CRUD serveurs — DELETE** : supprimer un serveur (container + ligne DB `game_servers`)
         depuis l'admin, confirmation forte. Endpoint `POST /api/servers/{id}/delete`.
-  - [ ] **CRUD serveurs — CREATE/ré-attribution** : créer un serveur au nom d'un user →
-        nécessite l'**orchestrateur** (vit dans l'API `internal/orchestrator`, pas le monitor).
-        À câbler : soit endpoint admin sur l'API (token interne), soit le monitor importe
-        l'orchestrateur. ⚠️ ne pas faire à moitié (sinon ports/volumes/mc-router orphelins).
+  - [x] **CRUD serveurs — CREATE depuis /admin** (2026-06-12, EN LIGNE) : onglet Utilisateurs →
+        bouton **« + Serveur »** (modale jeu/plan/nom) crée un serveur **au nom du user** via
+        l'orchestrateur de l'API. Endpoints admin internes API (`/api/v1/admin/catalog`,
+        `/servers`, `/users/{id}/unlimited`) protégés par **`X-Admin-Token`** (`ADMIN_TOKEN`,
+        partagé monitor↔API) ; le monitor proxifie (`/api/catalog`, `/api/users/{id}/create-server`,
+        `/api/users/{id}/unlimited`). Cœur de création refactoré (`createServerForUser`).
+        Validé e2e (create 201 + delete 204).
+  - [x] **Droit « création illimitée » par user** (toggle dans /admin) : colonne
+        `users.unlimited_create` (migration `003_admin_grants.sql`, owner `simong2004@hotmail.com`
+        = true par défaut, **désactivable**). Permet de créer sur un plan **payant sans payer** ;
+        sinon un plan payant à la création est ramené à `free` (garde dans `createServerForUser`).
   - [ ] **Mini-Jira (board tickets)** : colonnes à faire/en cours/fait, persisté en DB
         (nouvelle table `admin_tasks`), pour remplacer ce backlog .md à terme.
   - [ ] **Métriques business avancées** : conversions, **coûts annonces** (Google Ads),

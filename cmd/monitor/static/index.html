@@ -198,6 +198,7 @@
     <!-- ===================== UTILISATEURS ===================== -->
     <div id="view-users" class="view">
       <h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Utilisateurs <span id="user-count" class="text-zinc-600"></span></h2>
+      <p class="text-[11px] text-zinc-600 mb-3">« Création illimitée » = l'utilisateur peut créer un serveur sur n'importe quel plan sans payer. « + Serveur » = créer un serveur à sa place (autorité admin).</p>
       <div class="rounded-xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
@@ -206,11 +207,41 @@
               <th class="px-4 py-3 font-medium">Email</th>
               <th class="px-4 py-3 font-medium">Plan</th>
               <th class="px-4 py-3 font-medium">Serveurs</th>
+              <th class="px-4 py-3 font-medium">Création illimitée</th>
               <th class="px-4 py-3 font-medium">Inscrit</th>
+              <th class="px-4 py-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody id="users"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Modale : créer un serveur pour un utilisateur -->
+    <div id="create-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4">
+      <div class="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <h3 class="text-lg font-semibold text-white">Créer un serveur</h3>
+        <p id="cm-user" class="mt-1 text-sm text-zinc-400">pour —</p>
+        <div class="mt-5 space-y-4">
+          <div>
+            <label class="mb-1.5 block text-xs uppercase tracking-wide text-zinc-500">Nom du serveur</label>
+            <input id="cm-name" class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" placeholder="ex. mon-serveur" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1.5 block text-xs uppercase tracking-wide text-zinc-500">Jeu</label>
+              <select id="cm-game" class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"></select>
+            </div>
+            <div>
+              <label class="mb-1.5 block text-xs uppercase tracking-wide text-zinc-500">Plan</label>
+              <select id="cm-plan" class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"></select>
+            </div>
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end gap-2">
+          <button onclick="closeCreateModal()" class="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800">Annuler</button>
+          <button id="cm-submit" onclick="submitCreateServer()" class="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500">Créer</button>
+        </div>
       </div>
     </div>
   </div>
@@ -427,12 +458,20 @@
     async function fetchUsers() {
       try {
         const res = await fetch('api/users');
-        if (!res.ok) { document.getElementById('users').innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-zinc-600">Liste indisponible</td></tr>'; return; }
+        if (!res.ok) { document.getElementById('users').innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-zinc-600">Liste indisponible</td></tr>'; return; }
         lastUsers = await res.json();
         document.getElementById('user-count').textContent = `(${lastUsers.length})`;
         document.getElementById('tab-user-count').textContent = `(${lastUsers.length})`;
         document.getElementById('kpi-users').textContent = lastUsers.length;
-        document.getElementById('users').innerHTML = lastUsers.length ? lastUsers.map(u => `
+        const ubusy = (id) => busyIds.has('user:' + id);
+        const spin = '<span class="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full spin align-middle"></span>';
+        document.getElementById('users').innerHTML = lastUsers.length ? lastUsers.map(u => {
+          const on = !!u.unlimited_create, busy = ubusy(u.id);
+          const toggle = `<button ${busy ? 'disabled' : ''} onclick="toggleUnlimited('${u.id}', ${!on}, '${esc(u.username)}')"
+            title="${on ? 'Désactiver' : 'Activer'} la création illimitée"
+            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${on ? 'bg-green-600' : 'bg-zinc-700'} ${busy ? 'opacity-50' : ''}">
+            <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}"></span></button>`;
+          return `
           <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30">
             <td class="px-4 py-3">
               <div class="flex items-center gap-2">
@@ -443,9 +482,81 @@
             <td class="px-4 py-3 text-zinc-400">${esc(u.email) || '—'}</td>
             <td class="px-4 py-3 capitalize ${planColor(u.plan)}">${esc(u.plan)}</td>
             <td class="px-4 py-3 font-mono">${u.server_count}</td>
+            <td class="px-4 py-3"><div class="flex items-center gap-2">${busy ? spin : toggle}<span class="text-xs ${on ? 'text-green-400' : 'text-zinc-600'}">${on ? 'activé' : 'désactivé'}</span></div></td>
             <td class="px-4 py-3 text-zinc-500 text-xs">${new Date(u.created_at).toLocaleDateString('fr-CA')}</td>
-          </tr>`).join('') : '<tr><td colspan="5" class="px-4 py-4 text-zinc-600">Aucun utilisateur</td></tr>';
+            <td class="px-4 py-3"><button onclick="openCreateModal('${u.id}','${esc(u.username)}')" class="text-xs px-2.5 py-1 rounded-md border border-green-800 text-green-300 hover:bg-green-900/40">+ Serveur</button></td>
+          </tr>`;
+        }).join('') : '<tr><td colspan="7" class="px-4 py-4 text-zinc-600">Aucun utilisateur</td></tr>';
       } catch (e) { /* ignore */ }
+    }
+
+    // Toggle du droit "création illimitée"
+    async function toggleUnlimited(userId, enabled, username) {
+      busyIds.add('user:' + userId); fetchUsers();
+      try {
+        const res = await fetch(`api/users/${userId}/unlimited`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled }),
+        });
+        if (!res.ok) throw new Error((await res.text()) || ('HTTP ' + res.status));
+        toast(`« ${username} » : création illimitée ${enabled ? 'activée' : 'désactivée'} ✓`, 'ok');
+      } catch (e) {
+        toast(`Échec toggle « ${username} » : ${e.message}`, 'err');
+      } finally {
+        busyIds.delete('user:' + userId);
+        await fetchUsers();
+      }
+    }
+
+    // --- Modale : créer un serveur pour un user ---
+    let catalog = null, createUserId = null;
+    async function loadCatalog() {
+      if (catalog) return catalog;
+      const res = await fetch('api/catalog');
+      if (!res.ok) throw new Error('catalogue indisponible');
+      catalog = await res.json();
+      return catalog;
+    }
+    async function openCreateModal(userId, username) {
+      createUserId = userId;
+      document.getElementById('cm-user').textContent = 'pour ' + username;
+      document.getElementById('cm-name').value = '';
+      try {
+        const cat = await loadCatalog();
+        document.getElementById('cm-game').innerHTML = (cat.games || []).map(g => `<option value="${g}">${g}</option>`).join('');
+        document.getElementById('cm-plan').innerHTML = (cat.plans || []).map(p =>
+          `<option value="${p.name}">${p.name}${p.free ? ' (gratuit)' : ' — ' + (p.ram_mb/1024).toFixed(0) + ' Go'}</option>`).join('');
+      } catch (e) {
+        toast(e.message, 'err'); return;
+      }
+      const m = document.getElementById('create-modal');
+      m.classList.remove('hidden'); m.classList.add('flex');
+    }
+    function closeCreateModal() {
+      const m = document.getElementById('create-modal');
+      m.classList.add('hidden'); m.classList.remove('flex');
+    }
+    async function submitCreateServer() {
+      const name = document.getElementById('cm-name').value.trim();
+      const game = document.getElementById('cm-game').value;
+      const plan = document.getElementById('cm-plan').value;
+      if (!name) { toast('Donne un nom au serveur.', 'info'); return; }
+      const btn = document.getElementById('cm-submit');
+      btn.disabled = true; btn.textContent = 'Création…';
+      try {
+        const res = await fetch(`api/users/${createUserId}/create-server`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, game, plan }),
+        });
+        if (!res.ok) throw new Error((await res.text()) || ('HTTP ' + res.status));
+        toast(`Serveur « ${name} » (${game}/${plan}) créé ✓`, 'ok');
+        closeCreateModal();
+        await fetchServers(); fetchUsers();
+      } catch (e) {
+        toast('Échec création : ' + e.message, 'err');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Créer';
+      }
     }
 
     // ---------- Serveurs (DB) ----------

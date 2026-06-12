@@ -60,6 +60,11 @@ type Config struct {
 	// Ingestion du courrier entrant (Cloudflare Email Worker → backend → mailserver)
 	IngestSecret string
 
+	// AdminToken : secret partagé entre le monitor (/admin) et l'API pour les
+	// endpoints d'administration internes (création de serveur pour un user,
+	// toggle des droits). Vide = endpoints admin désactivés.
+	AdminToken string
+
 	Env string
 }
 
@@ -103,6 +108,8 @@ func Load() *Config {
 		SupportTo:   getEnv("SUPPORT_TO", "contact@mcserver.vbt-prog.com"),
 
 		IngestSecret: getEnv("INGEST_SECRET", ""),
+
+		AdminToken: getEnv("ADMIN_TOKEN", ""),
 
 		Env: getEnv("ENV", "development"),
 	}

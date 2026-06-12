@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -53,6 +54,10 @@ func main() {
 			slog.Warn("db unavailable, users list disabled", "err", err)
 		}
 	}
+
+	// Client admin (proxy vers l'API) : création de serveur pour un user + toggle
+	// des droits. nil si API_BASE/ADMIN_TOKEN absents → endpoints renvoient 503.
+	admin := monitor.NewAdminClient(getEnv("API_BASE", "http://mcserver-api:8080"), getEnv("ADMIN_TOKEN", ""))
 
 	mux := http.NewServeMux()
 
@@ -191,6 +196,58 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// --- Admin : catalogue, création de serveur pour un user, toggle des droits ---
+	relay := func(w http.ResponseWriter, status int, body []byte, err error) {
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body)
+	}
+
+	mux.HandleFunc("GET /api/catalog", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, body, err := admin.Catalog(ctx)
+		relay(w, st, body, err)
+	})
+
+	mux.HandleFunc("POST /api/users/{id}/unlimited", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		st, out, err := admin.SetUnlimited(ctx, r.PathValue("id"), body)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("POST /api/users/{id}/create-server", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
+		var in map[string]any
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		in["user_id"] = r.PathValue("id")
+		payload, _ := json.Marshal(in)
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		st, out, err := admin.CreateServer(ctx, payload)
+		relay(w, st, out, err)
 	})
 
 	mux.Handle("GET /", http.FileServer(http.FS(staticFS)))

@@ -31,3 +31,8 @@ func GetPlan(name string) (Plan, error) {
 	}
 	return p, nil
 }
+
+// PlanNames retourne les plans dans l'ordre croissant de ressources.
+func PlanNames() []string {
+	return []string{"free", "starter", "standard", "pro", "extreme"}
+}
