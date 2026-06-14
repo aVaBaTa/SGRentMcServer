@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Server, ArrowLeft } from "lucide-react";
 import { posts, getPost } from "../posts";
+import { AuthButton } from "@/components/site-chrome";
 
 export function generateStaticParams() {
   return posts.map((p) => ({ slug: p.slug }));
@@ -55,12 +56,15 @@ export default async function BlogPost({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <nav className="border-b border-zinc-800 px-6 py-4 flex items-center gap-3">
-        <Link href="/blog" className="text-zinc-400 hover:text-zinc-100 transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <Server className="w-5 h-5 text-green-400" />
-        <span className="font-bold">Playrena — Blog</span>
+      <nav className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Link href="/blog" className="text-zinc-400 hover:text-zinc-100 transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <Server className="w-5 h-5 text-green-400" />
+          <span className="font-bold">Playrena — Blog</span>
+        </div>
+        <AuthButton />
       </nav>
 
       <article className="max-w-2xl mx-auto px-6 py-12">

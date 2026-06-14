@@ -5,12 +5,12 @@ import (
 	"sort"
 )
 
-// satisfactoryMsgOffset : décalage entre le port de base (jeu) et le port
-// "reliable messaging" de Satisfactory. La plage des ports de base s'arrête à
-// 26065 (voir ports.go) et la moitié haute (26066-26565) est réservée aux ports
-// dérivés — ainsi un port messaging ne peut jamais entrer en collision avec le
-// port de base d'un autre serveur.
-const satisfactoryMsgOffset = 500
+// satisfactoryMsgOffset : décalage, DANS LE BLOC du serveur, entre le port de
+// base (jeu) et le port "reliable messaging" de Satisfactory. Chaque serveur
+// possède un bloc de ports contigus (voir portBlockSize dans ports.go), donc un
+// simple +1 suffit : il reste dans le bloc et ne peut pas entrer en collision
+// avec un autre serveur. (Doit rester < portBlockSize.)
+const satisfactoryMsgOffset = 1
 
 // PortMapping décrit un port à publier : port hôte → port interne du container,
 // pour un protocole donné. Pour Minecraft, l'interne est figé (25565) et l'hôte
@@ -49,6 +49,12 @@ type GameDef struct {
 	// — et donc d'éviter l'OAuth "downloader" à chaque création. Le client n'a plus
 	// que l'auth SERVEUR à faire. Si les fichiers sont absents → repli sur download.
 	SeedFiles []string
+
+	// ConsoleStdin : le serveur lit ses commandes sur STDIN (console interactive,
+	// ex. Hytale → `discovery link <token>`). Le container doit être créé avec
+	// OpenStdin ; les commandes sont envoyées via Docker attach (cf. SendStdin).
+	// Les jeux à RCON (Minecraft) gardent ConsoleStdin=false → exec rcon-cli.
+	ConsoleStdin bool
 
 	// Ports retourne les bindings à publier pour un port de base alloué.
 	Ports func(basePort int) []PortMapping
@@ -111,10 +117,12 @@ var games = map[string]GameDef{
 		UsesMCRouter: false, // QUIC/UDP, pas de routing par hostname → IP:port direct
 		NeedsAuth:    true,  // auth SERVEUR interactive faite par le CLIENT (device-code)
 		MinRAMMb:     10240, // 10 Go : plancher réaliste/stable (4 Go crashe sous charge)
-		MinCPUCores:  2.0,
+		MinCPUCores:  4.0,   // serveur Java lourd : 2 cœurs throttlent (lag aux actions), CPU abondant
 		// Fichiers de jeu pré-téléchargés sur l'hôte (cf. scripts/hytale-seed) →
 		// réutilisés à chaque création : pas de re-download ni d'OAuth downloader.
 		SeedFiles: []string{"HytaleServer.jar", "Assets.zip"},
+		// Console interactive via stdin (pas de RCON) → `discovery link <token>`, etc.
+		ConsoleStdin: true,
 		Ports: func(base int) []PortMapping {
 			// Un seul port UDP (QUIC). On configure le serveur pour écouter sur
 			// le port alloué (SERVER_PORT), mapping identité hôte == interne.

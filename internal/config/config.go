@@ -36,6 +36,12 @@ type Config struct {
 	// DOCKER_NODES="node1=unix:///var/run/docker.sock,node2=tcp://192.168.1.11:2376"
 	DockerNodes []DockerNode
 
+	// PrimaryNode : node où sont ÉPINGLÉS les jeux à IP directe (Hytale, Satisfactory…).
+	// Raison : le routeur ne peut rediriger une plage de ports que vers UNE machine ;
+	// en épinglant ces jeux sur un seul node, le NAT reste simple (plage → 1 IP LAN).
+	// Les jeux mc-router (Minecraft) restent load-balancés (routage par hostname OK cross-node).
+	PrimaryNode string
+
 	ServersDomain string // ex: servers.vbt-prog.com (pour mc-router hostname)
 	MCNetwork     string // réseau Docker partagé avec mc-router
 
@@ -45,6 +51,10 @@ type Config struct {
 	// son OAuth downloader) à chaque création — le volume est seedé avant le start.
 	// Vide → comportement historique (le container télécharge lui-même).
 	SeedDir string
+
+	// MetricsExcludeUsers : usernames (minuscule) exclus des métriques business /admin
+	// (compte proprio/tests). Les serveurs/paiements/users de ces comptes ne comptent pas.
+	MetricsExcludeUsers []string
 
 	MCRouterAPI string            // ex: http://mc-router:26666
 	NodeAddrs   map[string]string // IP LAN par node pour le routing (node1=10.0.0.2,...)
@@ -93,12 +103,14 @@ func Load() *Config {
 		PayPalSecret:   getEnv("PAYPAL_SECRET", ""),
 		PayPalEnv:      getEnv("PAYPAL_ENV", "sandbox"),
 
-		DockerNodes:   parseNodes(getEnv("DOCKER_NODES", "node1=unix:///var/run/docker.sock")),
-		ServersDomain: getEnv("SERVERS_DOMAIN", "servers.vbt-prog.com"),
-		MCNetwork:     getEnv("MC_NETWORK", "mc-net"),
-		SeedDir:       getEnv("SEED_DIR", "/seeds"),
-		MCRouterAPI:   getEnv("MC_ROUTER_API", "http://mc-router:26666"),
-		NodeAddrs:     parseKV(getEnv("NODE_ADDRS", "node1=10.0.0.2,node2=10.0.0.110")),
+		DockerNodes:         parseNodes(getEnv("DOCKER_NODES", "node1=unix:///var/run/docker.sock")),
+		PrimaryNode:         getEnv("PRIMARY_NODE", "node1"),
+		ServersDomain:       getEnv("SERVERS_DOMAIN", "servers.vbt-prog.com"),
+		MCNetwork:           getEnv("MC_NETWORK", "mc-net"),
+		SeedDir:             getEnv("SEED_DIR", "/seeds"),
+		MetricsExcludeUsers: parseList(getEnv("METRICS_EXCLUDE_USERS", "avabata")),
+		MCRouterAPI:         getEnv("MC_ROUTER_API", "http://mc-router:26666"),
+		NodeAddrs:           parseKV(getEnv("NODE_ADDRS", "node1=10.0.0.2,node2=10.0.0.110")),
 
 		SMTPHost:    getEnv("SMTP_HOST", "mailserver"),
 		SMTPPort:    getEnv("SMTP_PORT", "587"),
@@ -113,6 +125,17 @@ func Load() *Config {
 
 		Env: getEnv("ENV", "development"),
 	}
+}
+
+// parseList parse "a,b,c" en []string (trim + minuscule, vides ignorés).
+func parseList(raw string) []string {
+	var out []string
+	for _, p := range strings.Split(raw, ",") {
+		if v := strings.ToLower(strings.TrimSpace(p)); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // parseKV parse "k1=v1,k2=v2" en map.

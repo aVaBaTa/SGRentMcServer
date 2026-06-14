@@ -250,6 +250,68 @@ func main() {
 		relay(w, st, out, err)
 	})
 
+	mux.HandleFunc("POST /api/servers/{id}/resources", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		st, out, err := admin.UpdateResources(ctx, r.PathValue("id"), body)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("GET /api/promo", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.GetPromo(ctx)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("POST /api/promo", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.SetPromo(ctx, body)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("GET /api/games", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.ListGames(ctx)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("POST /api/games/{id}/config", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.SetGameConfig(ctx, r.PathValue("id"), body)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("GET /api/metrics", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.Metrics(ctx)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("GET /api/feedback", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.Feedback(ctx)
+		relay(w, st, out, err)
+	})
+
 	mux.Handle("GET /", http.FileServer(http.FS(staticFS)))
 	// Sert l'index à la racine
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {

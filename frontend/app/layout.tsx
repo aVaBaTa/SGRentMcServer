@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n";
+import { FeedbackWidget } from "@/components/site-chrome";
 
 const GADS_ID = "AW-18226964787";
 
@@ -42,18 +43,38 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://playrena.vbt-prog.com" },
 };
 
-export default function RootLayout({
+// Récupère le rabais global côté serveur (SSR) → prix réduits dès le 1er rendu.
+// URL interne si dispo (rapide), sinon URL publique. Cache 60 s (revalidate).
+async function getInitialPromo(): Promise<number> {
+  const base = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+  try {
+    // Timeout court : au BUILD l'API n'est pas joignable → on échoue vite (sinon le build
+    // hang 60s/page). Au runtime l'URL interne répond en quelques ms.
+    const res = await fetch(`${base}/api/v1/promo`, { next: { revalidate: 30 }, signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return 0;
+    const d = await res.json();
+    return Number(d?.percent) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const initialPromo = await getInitialPromo();
   return (
     <html
       lang="fr"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">
-        <LanguageProvider>{children}</LanguageProvider>
+        <LanguageProvider initialPromo={initialPromo}>
+          {children}
+          <FeedbackWidget />
+        </LanguageProvider>
       </body>
 
       {/* Google tag (gtag.js) — Google Ads */}

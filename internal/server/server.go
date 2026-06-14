@@ -74,12 +74,21 @@ func (s *Server) mountRoutes() {
 		// --- Routes publiques (sans authentification) ---
 		r.Post("/support", s.handleSupport)
 		r.Post("/mail/ingest", s.handleMailIngest) // Cloudflare Email Worker → livraison locale (protégé par secret)
+		r.Get("/promo", s.handlePromo)             // rabais global actif (affichage prix)
+		r.Post("/feedback", s.handleFeedback)      // sondage visiteurs (widget « Ton avis ? »)
 
 		// --- Routes admin internes (monitor /admin → API, protégées par X-Admin-Token) ---
 		r.Route("/admin", func(r chi.Router) {
 			r.Get("/catalog", s.handleAdminCatalog)
 			r.Post("/servers", s.handleAdminCreateServer)
+			r.Post("/servers/{id}/resources", s.handleAdminUpdateResources)
 			r.Post("/users/{id}/unlimited", s.handleAdminSetUnlimited)
+			r.Get("/promo", s.handleAdminGetPromo)
+			r.Post("/promo", s.handleAdminSetPromo)
+			r.Get("/games", s.handleAdminListGames)
+			r.Post("/games/{id}/config", s.handleAdminSetGameConfig)
+			r.Get("/metrics", s.handleAdminMetrics)
+			r.Get("/feedback", s.handleAdminFeedback)
 		})
 
 		// --- Routes authentifiées ---
@@ -108,6 +117,7 @@ func (s *Server) mountRoutes() {
 				r.Get("/{id}/logs", s.handleServerLogs)
 				r.Get("/{id}/auth", s.handleServerAuth)
 				r.Post("/{id}/command", s.handleServerCommand)
+				r.Post("/{id}/discovery", s.handleServerDiscovery)
 				r.Get("/{id}/files", s.handleListFiles)
 				r.Get("/{id}/files/content", s.handleReadFile)
 				r.Put("/{id}/files/content", s.handleWriteFile)

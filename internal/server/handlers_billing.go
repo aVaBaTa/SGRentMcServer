@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -50,7 +51,11 @@ func (s *Server) handleCreatePayPalOrder(w http.ResponseWriter, r *http.Request)
 	}
 	claims := auth.GetClaims(r)
 
-	order, err := s.paypal.CreateOrder(r.Context(), plan.PriceString(),
+	// Applique le rabais global actif (cf. /admin) au montant réellement facturé.
+	cents := s.applyPromoCents(r.Context(), plan.PriceCents)
+	amount := fmt.Sprintf("%d.%02d", cents/100, cents%100)
+
+	order, err := s.paypal.CreateOrder(r.Context(), amount,
 		"SGRentMc — plan "+plan.Name+" pour "+gs.Name)
 	if err != nil {
 		slog.Error("paypal create order", "err", err)
@@ -62,7 +67,7 @@ func (s *Server) handleCreatePayPalOrder(w http.ResponseWriter, r *http.Request)
 		UserID:          claims.UserID,
 		ServerID:        gs.ID,
 		Plan:            plan.Name,
-		AmountCents:     plan.PriceCents,
+		AmountCents:     cents,
 		Currency:        "USD",
 		Provider:        "paypal",
 		ProviderOrderID: order.ID,

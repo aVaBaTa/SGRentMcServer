@@ -67,6 +67,51 @@ func (s *Server) handleAdminSetUnlimited(w http.ResponseWriter, r *http.Request)
 	respond(w, http.StatusOK, map[string]any{"id": id, "unlimited_create": body.Enabled})
 }
 
+// handleAdminUpdateResources : l'admin change la RAM/CPU d'un serveur (override).
+// Applique à chaud sur le container (si présent) via l'orchestrateur + persiste en DB.
+func (s *Server) handleAdminUpdateResources(w http.ResponseWriter, r *http.Request) {
+	if !s.adminAuthorized(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var body struct {
+		RAMMb    int64   `json:"ram_mb"`
+		CPUCores float64 `json:"cpu_cores"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	// Bornes de sécurité (évite 0 / valeurs absurdes qui tueraient le container).
+	if body.RAMMb < 512 || body.RAMMb > 131072 || body.CPUCores < 0.5 || body.CPUCores > 64 {
+		http.Error(w, "ram_mb (512–131072) ou cpu_cores (0.5–64) hors bornes", http.StatusBadRequest)
+		return
+	}
+	gs, err := s.serverRepo.GetByIDAny(r.Context(), id)
+	if err != nil {
+		http.Error(w, "server not found", http.StatusNotFound)
+		return
+	}
+	// Applique à chaud sur le container si présent (sinon : DB seulement, prend effet au prochain start).
+	if gs.ContainerID != "" {
+		node, err := s.orch.NodeByID(gs.Node)
+		if err != nil {
+			http.Error(w, "node unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if err := node.UpdateResources(r.Context(), gs.ContainerID, body.RAMMb, body.CPUCores); err != nil {
+			http.Error(w, "docker update failed: "+err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+	}
+	if err := s.serverRepo.UpdateResources(r.Context(), id, body.RAMMb, body.CPUCores); err != nil {
+		http.Error(w, "database error", http.StatusInternalServerError)
+		return
+	}
+	respond(w, http.StatusOK, map[string]any{"id": id, "ram_mb": body.RAMMb, "cpu_cores": body.CPUCores})
+}
+
 // handleAdminCreateServer : l'admin crée un serveur AU NOM d'un utilisateur, sur
 // n'importe quel plan, sans paiement (autorité admin).
 func (s *Server) handleAdminCreateServer(w http.ResponseWriter, r *http.Request) {

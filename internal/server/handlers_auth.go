@@ -31,6 +31,8 @@ type authStatus struct {
 	URL     string   `json:"url,omitempty"`  // URL de vérification à visiter
 	Code    string   `json:"code,omitempty"` // code à entrer
 	Raw     []string `json:"raw,omitempty"`  // lignes de log pertinentes (repli manuel)
+	Booting bool     `json:"booting,omitempty"` // container vivant mais pas encore d'URL (démarrage/DL)
+	Gone    bool     `json:"gone,omitempty"`    // container introuvable (supprimé) → recréer
 }
 
 // relevantAuthLines garde les dernières lignes mentionnant auth / URL / code.
@@ -170,11 +172,21 @@ func (s *Server) handleServerAuth(w http.ResponseWriter, r *http.Request) {
 		respond(w, http.StatusOK, authStatus{Pending: false})
 		return
 	}
+	// Container disparu (supprimé/nettoyé) alors que le serveur est encore "auth_required"
+	// en base → on le signale pour que le panel propose de recréer (évite la carte morte).
+	if _, err := node.GetContainerStatus(r.Context(), gs.ContainerID); err != nil {
+		respond(w, http.StatusOK, authStatus{Gone: true})
+		return
+	}
 	logs, err := node.Logs(r.Context(), gs.ContainerID, 1500)
 	if err != nil {
-		respond(w, http.StatusOK, authStatus{Pending: false})
+		respond(w, http.StatusOK, authStatus{Booting: true})
 		return
 	}
 	st, _ := parseAuthFromLogs(logs)
+	// Container vivant mais aucune URL/code encore parsé → il démarre/télécharge encore.
+	if !st.Pending && !st.Gone {
+		st.Booting = true
+	}
 	respond(w, http.StatusOK, st)
 }

@@ -61,14 +61,27 @@ export default function DashboardHub() {
     fetchServers();
   }
 
+  async function logout() {
+    try { await fetch(`${API}/auth/logout`, { method: "POST", credentials: "include" }); } catch { /* ignore */ }
+    router.push("/");
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <nav className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2 font-bold text-lg">
+        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg">
           <Server className="w-5 h-5 text-green-400" />
           Playrena
+        </Link>
+        {/* Accès aux pages publiques (blog, jeux…) en restant connecté — la session
+            (cookie) persiste, le retour au dashboard reste connecté. */}
+        <div className="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400">
+          <Link href="/games" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.navGames}</Link>
+          <Link href="/blog" className="hover:text-zinc-100 transition-colors">{t.nav.blog}</Link>
+          <Link href="/mods" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.mods}</Link>
+          <LanguageSwitcher />
+          <button onClick={logout} className="text-zinc-400 hover:text-red-400 transition-colors">{t.nav.logout}</button>
         </div>
-        <LanguageSwitcher />
       </nav>
 
       <div className="flex-1 p-6 max-w-5xl mx-auto w-full">

@@ -82,20 +82,36 @@ func (s *Server) createServerForUser(ctx context.Context, userID, username strin
 		req.Plan = plan.Name
 	}
 
-	// Plancher de ressources par jeu : un serveur Satisfactory tourne en 4 Go
-	// même sur le plan "free" (offert pour l'instant). Le label de plan et la
-	// facturation restent inchangés ; seules les ressources réelles sont relevées.
-	ramMb, cpuCores := gameDef.ApplyFloor(plan.RAMMb, plan.CPUCores)
+	// Plancher de ressources par jeu : override admin (Redis) si présent, sinon valeurs
+	// games.go. Un serveur est toujours relevé au plancher du jeu (ex. Hytale 10 Go), même
+	// sur le plan "free". Label de plan et facturation inchangés.
+	floorRAM, floorCPU := s.effectiveFloor(ctx, gameDef)
+	ramMb, cpuCores := plan.RAMMb, plan.CPUCores
+	if floorRAM > ramMb {
+		ramMb = floorRAM
+	}
+	if floorCPU > cpuCores {
+		cpuCores = floorCPU
+	}
 
-	node, err := s.orch.BestNode(ctx, ramMb)
+	// Placement du node :
+	//  - jeux mc-router (Minecraft) : load-balance (routage par hostname OK cross-node).
+	//  - jeux à IP DIRECTE (Hytale, Satisfactory) : ÉPINGLÉS sur le node primaire pour que
+	//    le NAT routeur reste simple (une plage de ports → une seule IP LAN). Cf. PrimaryNode.
+	var node *orchestrator.Node
+	if gameDef.UsesMCRouter {
+		node, err = s.orch.BestNode(ctx, ramMb)
+	} else {
+		node, err = s.orch.NodeWithCapacity(ctx, s.cfg.PrimaryNode, ramMb)
+	}
 	if err != nil {
-		slog.Error("no available node", "err", err)
+		slog.Error("no available node", "err", err, "game", req.Game, "mcrouter", gameDef.UsesMCRouter)
 		return nil, http.StatusServiceUnavailable, fmt.Errorf("no capacity available, try again later")
 	}
 
-	port, err := servers.NextAvailablePort(ctx, s.db)
+	port, err := servers.NextAvailableBase(ctx, s.db)
 	if err != nil {
-		slog.Error("no available port", "err", err)
+		slog.Error("no available port block", "err", err)
 		return nil, http.StatusInternalServerError, fmt.Errorf("no available port")
 	}
 
@@ -139,6 +155,7 @@ func (s *Server) buildSpec(gs *servers.GameServer, gameDef servers.GameDef, plan
 		Subdomain:     gs.Subdomain,
 		Network:       s.cfg.MCNetwork,
 		EnvVars:       gameDef.Env(plan, version, gs.Port),
+		OpenStdin:     gameDef.ConsoleStdin, // console interactive (Hytale)
 	}
 	for _, p := range gameDef.Ports(gs.Port) {
 		spec.Ports = append(spec.Ports, orchestrator.PortBinding{
@@ -443,14 +460,21 @@ func (s *Server) handleUpgradeServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Plancher de ressources par jeu (même logique qu'à la création) : un
-	// downgrade ne doit pas descendre un serveur Satisfactory sous son minimum.
+	// Plancher de ressources par jeu (même logique qu'à la création, override admin inclus) :
+	// un downgrade ne doit pas descendre un serveur sous son minimum.
 	gameDef, err := servers.GetGame(gs.Game)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	ramMb, cpuCores := gameDef.ApplyFloor(plan.RAMMb, plan.CPUCores)
+	floorRAM, floorCPU := s.effectiveFloor(r.Context(), gameDef)
+	ramMb, cpuCores := plan.RAMMb, plan.CPUCores
+	if floorRAM > ramMb {
+		ramMb = floorRAM
+	}
+	if floorCPU > cpuCores {
+		cpuCores = floorCPU
+	}
 
 	// NOTE: la facturation (PayPal) est gérée séparément (handlers_billing).
 	// Le nombre de slots (MAX_PLAYERS) est une variable d'env immuable : pour

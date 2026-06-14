@@ -41,18 +41,29 @@ cat <<EOF
 EOF
 
 echo "→ Attente de ${FILES[*]} dans $DL_DIR (Ctrl-C pour annuler)…"
+# L'image extrait HytaleServer.jar d'abord dans Server/ puis le déplace à la racine.
+# On le cherche aux deux endroits.
+find_seed() {
+  if [ -s "$DL_DIR/$1" ]; then echo "$DL_DIR/$1"; return 0; fi
+  if [ -s "$DL_DIR/Server/$1" ]; then echo "$DL_DIR/Server/$1"; return 0; fi
+  return 1
+}
+
 while :; do
   ok=1
   for f in "${FILES[@]}"; do
-    [ -s "$DL_DIR/$f" ] || ok=0
+    find_seed "$f" >/dev/null || ok=0
   done
+  # Exige que l'extraction soit FINIE (game.zip supprimé) → évite de copier un
+  # Assets.zip encore en cours d'écriture (fichier partiel/corrompu).
+  [ -e "$DL_DIR/game.zip" ] && ok=0
   [ "$ok" = 1 ] && break
   sleep 5
 done
 
-echo "→ Fichiers présents. Copie vers $SEED_DIR…"
+echo "→ Fichiers prêts (extraction terminée). Copie vers $SEED_DIR…"
 for f in "${FILES[@]}"; do
-  cp -f "$DL_DIR/$f" "$SEED_DIR/$f"
+  cp -f "$(find_seed "$f")" "$SEED_DIR/$f"
   echo "   ✓ $f ($(du -h "$SEED_DIR/$f" | cut -f1))"
 done
 

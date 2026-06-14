@@ -1,9 +1,33 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Server } from "lucide-react";
 import { useI18n, type Lang } from "@/lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+// AuthButton : affiche « Tableau de bord » si l'utilisateur est connecté (cookie de
+// session valide, vérifié via /api/v1/me), sinon « Se connecter » (OAuth Discord).
+// → l'utilisateur reste connecté en naviguant et a toujours un lien vers son espace.
+export function AuthButton() {
+  const { t } = useI18n();
+  const [authed, setAuthed] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch(`${API}/api/v1/user/me`, { credentials: "include" })
+      .then((r) => setAuthed(r.ok))
+      .catch(() => setAuthed(false));
+  }, []);
+  if (authed === null) return <span className="inline-block w-28 h-9" aria-hidden />;
+  return authed ? (
+    <a href="/dashboard" className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg transition-colors font-medium">
+      {t.nav.dashboard}
+    </a>
+  ) : (
+    <a href={`${API}/auth/discord`} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors font-medium">
+      {t.nav.login}
+    </a>
+  );
+}
 const DISCORD_INVITE = "https://discord.gg/3knNHXqpNG";
 
 type IconProps = { className?: string };
@@ -36,9 +60,98 @@ export function LanguageSwitcher() {
   );
 }
 
+export function PromoBanner() {
+  const { t, promo } = useI18n();
+  if (!promo) return null;
+  return (
+    <div className="bg-gradient-to-r from-green-600 to-emerald-500 text-black text-center text-sm font-semibold px-4 py-2">
+      {t.promoBanner.replace("{pct}", String(promo))}
+    </div>
+  );
+}
+
+// FeedbackWidget : bouton flottant + sondage (canal d'acquisition, cas d'usage, jeu,
+// note, commentaire) → POST /api/v1/feedback. Résultats agrégés dans /admin.
+export function FeedbackWidget() {
+  const { t } = useI18n();
+  const s = t.survey;
+  const [open, setOpen] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [source, setSource] = useState("");
+  const [usecase, setUsecase] = useState("");
+  const [game, setGame] = useState("");
+  const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
+
+  const chip = (val: string, label: string, sel: string, set: (v: string) => void) => (
+    <button key={val} type="button" onClick={() => set(sel === val ? "" : val)}
+      className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${sel === val ? "border-green-500 bg-green-500/15 text-green-300" : "border-zinc-700 text-zinc-400 hover:text-zinc-200"}`}>{label}</button>
+  );
+
+  async function submit() {
+    if (sending) return;
+    setSending(true);
+    try {
+      await fetch(`${API}/api/v1/feedback`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, source, usecase, game, message, email, page: typeof location !== "undefined" ? location.pathname : "" }),
+      });
+      setSent(true);
+      setTimeout(() => setOpen(false), 2500);
+    } catch { /* ignore */ } finally { setSending(false); }
+  }
+
+  return (
+    <>
+      <button onClick={() => { setOpen(true); setSent(false); }}
+        className="fixed bottom-4 right-4 z-40 bg-green-500 hover:bg-green-400 text-black font-semibold text-sm px-4 py-2.5 rounded-full shadow-lg shadow-green-500/20">
+        💬 {s.button}
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-4" onClick={() => setOpen(false)}>
+          <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl p-6 max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            {sent ? (
+              <div className="text-center py-6">
+                <div className="text-lg font-semibold text-green-400 mb-3">{s.thanks}</div>
+                <button onClick={() => setOpen(false)} className="text-sm text-zinc-400 hover:text-zinc-200">{s.close}</button>
+              </div>
+            ) : (
+              <>
+                <div className="font-bold text-lg">{s.title}</div>
+                <p className="text-sm text-zinc-400 mb-4">{s.intro}</p>
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <div className="text-sm text-zinc-300 mb-1.5">{s.rating}</div>
+                    <div className="flex gap-1">{[1, 2, 3, 4, 5].map((n) => (
+                      <button key={n} type="button" onClick={() => setRating(n)} className={`text-2xl ${n <= rating ? "text-amber-400" : "text-zinc-600"} hover:text-amber-300`}>★</button>
+                    ))}</div>
+                  </div>
+                  <div><div className="text-sm text-zinc-300 mb-1.5">{s.source}</div><div className="flex flex-wrap gap-1.5">{Object.entries(s.sources).map(([k, l]) => chip(k, l as string, source, setSource))}</div></div>
+                  <div><div className="text-sm text-zinc-300 mb-1.5">{s.usecase}</div><div className="flex flex-wrap gap-1.5">{Object.entries(s.usecases).map(([k, l]) => chip(k, l as string, usecase, setUsecase))}</div></div>
+                  <div><div className="text-sm text-zinc-300 mb-1.5">{s.game}</div><div className="flex flex-wrap gap-1.5">{Object.entries(s.games).map(([k, l]) => chip(k, l as string, game, setGame))}</div></div>
+                  <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={s.message} rows={3} className="bg-black/40 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500" />
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={s.email} className="bg-black/40 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500" />
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => setOpen(false)} className="text-sm text-zinc-400 hover:text-zinc-200 px-3 py-2">{s.close}</button>
+                    <button onClick={submit} disabled={sending} className="bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold text-sm px-5 py-2 rounded-lg">{sending ? s.sending : s.send}</button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function SiteNav() {
   const { t } = useI18n();
   return (
+    <>
+    <PromoBanner />
     <nav className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between sticky top-0 z-30 bg-zinc-950/80 backdrop-blur">
       <a href="/games" className="flex items-center gap-2 font-bold text-lg">
         <Server className="w-5 h-5 text-green-400" />
@@ -49,11 +162,10 @@ export function SiteNav() {
         <a href="/mods" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.mods}</a>
         <a href="/blog" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.blog}</a>
         <LanguageSwitcher />
-        <a href={`${API}/auth/discord`} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors font-medium">
-          {t.nav.login}
-        </a>
+        <AuthButton />
       </div>
     </nav>
+    </>
   );
 }
 

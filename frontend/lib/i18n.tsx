@@ -31,15 +31,27 @@ export const PERIODS: Record<Period, { months: number; discount: number }> = {
   annually: { months: 12, discount: 0.2 },
 };
 
-// Prix mensuel effectif (avec rabais) et total facturé pour la période.
+// Rabais GLOBAL (promo /admin) appliqué à tous les prix. 1 = aucun rabais.
+// Mis à jour par LanguageProvider au chargement (fetch /api/v1/promo).
+let promoFactor = 1;
+export function setPromoFactor(percent: number) {
+  promoFactor = percent > 0 && percent <= 90 ? (100 - percent) / 100 : 1;
+}
+
+// Prix mensuel effectif (rabais période × promo globale) et total facturé.
 // On garde les décimales pour que la réduction soit réellement visible
 // (ex. 4 $ × -10 % = 3,60 $ et non arrondi à 4 $).
 export function priceFor(plan: PlanDef, lang: Lang, period: Period) {
-  const base = lang === "fr" ? plan.cad : plan.usd;
+  const raw = lang === "fr" ? plan.cad : plan.usd; // prix de base AVANT promo globale
   const { months, discount } = PERIODS[period];
-  const monthly = Math.round(base * (1 - discount) * 100) / 100;
-  const total = Math.round(monthly * months * 100) / 100;
-  return { monthly, total, months, discount };
+  const round = (n: number) => Math.round(n * 100) / 100;
+  // Prix original (sans promo globale) → pour l'affichage barré.
+  const originalMonthly = round(raw * (1 - discount));
+  const originalTotal = round(originalMonthly * months);
+  // Prix effectif (avec promo globale).
+  const monthly = round(raw * promoFactor * (1 - discount));
+  const total = round(monthly * months);
+  return { monthly, total, months, discount, originalMonthly, originalTotal, promoActive: promoFactor < 1 };
 }
 
 // Formate un montant. Les prix entiers restent sans décimale (4 $),
@@ -57,7 +69,26 @@ export const currencyCode = (lang: Lang) => (lang === "fr" ? "CAD" : "USD");
 type Dict = typeof fr;
 const fr = {
   langName: "Français (CA)",
-  nav: { plans: "Plans", blog: "Blog", games: "Jeux — bientôt", mods: "Mods", login: "Se connecter" },
+  nav: { plans: "Plans", blog: "Blog", games: "Jeux — bientôt", mods: "Mods", login: "Se connecter", dashboard: "Tableau de bord", logout: "Déconnexion" },
+  promoBanner: "🎉 Promo de lancement : -{pct}% sur tous les plans payants — durée limitée !",
+  survey: {
+    button: "Ton avis ?",
+    title: "Aide-nous à améliorer Playrena",
+    intro: "30 secondes — ça nous aide énormément 🙏",
+    rating: "Ton expérience",
+    source: "Comment as-tu connu Playrena ?",
+    usecase: "Pourquoi un serveur ?",
+    game: "Quel jeu t'intéresse le plus ?",
+    message: "Qu'est-ce qui te manque ou te ferait revenir ?",
+    email: "Email (optionnel — pour te recontacter)",
+    send: "Envoyer",
+    sending: "Envoi…",
+    thanks: "Merci ! 🎉 Ton retour nous aide à améliorer le site.",
+    close: "Fermer",
+    sources: { reddit: "Reddit", discord: "Discord", friend: "Un ami", google: "Google", other: "Autre" },
+    usecases: { friends: "Entre amis", community: "Communauté", test: "Tester un jeu", other: "Autre" },
+    games: { minecraft: "Minecraft", hytale: "Hytale", satisfactory: "Satisfactory", other: "Autre" },
+  },
   rating: "Serveurs dédiés",
   ratingSuffix: "Fait au Québec",
   hero: {
@@ -240,11 +271,18 @@ const fr = {
   srv: {
     connAddress: "Adresse de connexion",
     authTitle: "Autorisation Hytale requise",
-    authDesc: "Ton serveur Hytale doit être autorisé avec ton compte Hytale au premier démarrage. Ouvre le lien, connecte-toi et entre le code ci-dessous.",
+    authDesc: "Ton serveur Hytale doit être autorisé avec ton compte Hytale au premier démarrage. Suis les étapes ci-dessous — la page se met à jour toute seule.",
     authStep: "Étape {n} sur 2",
-    authVisit: "Ouvrir la page d'autorisation",
+    authVisit: "Ouvrir la page d'autorisation Hytale",
+    authStepLogin: "Connecte-toi avec ton compte Hytale (le serveur sera lié à TON compte).",
+    authStepCode: "Entre ce code, puis clique « Autoriser » :",
     authCode: "Code",
-    authWaiting: "En attente de l'autorisation… cette page se met à jour automatiquement.",
+    authCopy: "Copier le code",
+    authCopied: "Copié !",
+    authPreparing: "Préparation du serveur (démarrage / téléchargement)… le lien d'autorisation va apparaître ici.",
+    authWaiting: "En attente de ton autorisation… dès que c'est fait, le serveur démarre automatiquement.",
+    authGoneTitle: "Serveur introuvable",
+    authGoneDesc: "Le conteneur de ce serveur n'existe plus (supprimé ou nettoyé). Supprime-le et recrée un serveur Hytale.",
     authRaw: "Sortie du serveur (cherche un lien d'autorisation) :",
     authManual: "Si aucun bouton n'apparaît, copie le lien/code depuis les logs ci-dessous (ou la console plus bas).",
     version: "version",
@@ -252,6 +290,7 @@ const fr = {
     changePlan: "Changer de plan",
     currentPlan: "Plan actuel :",
     paidNeedSub: "Les plans payants nécessitent un abonnement.",
+    promoFree: "Offert (promo) : {n} Go inclus, gratuitement.",
     core: "cœur",
     cores: "cœurs",
     current: "actuel",
@@ -274,6 +313,29 @@ const fr = {
     cmdPlaceholder: "commande (ex: say bonjour, time set day, op Pseudo)",
     send: "Envoyer",
     consoleOffline: "Démarre le serveur pour accéder à la console et voir les joueurs connectés.",
+    consoleHytaleHint: "Hytale n'a pas de console RCON : l'autorisation se fait via le lien ci-dessus (le serveur la détecte automatiquement).",
+    cmdPlaceholderHytale: "commande console Hytale (ex: discovery link <token>)",
+    discTitle: "Listing public (browser Hytale)",
+    discDesc: "Fais apparaître ton serveur dans le navigateur de serveurs intégré à Hytale. Optionnel — ton serveur fonctionne sans.",
+    discStep1: "Crée/édite ton listing sur",
+    discStep2: "Copie le « discovery token » affiché et colle-le ci-dessous.",
+    discPlaceholder: "discovery token",
+    discApply: "Lier",
+    discUnlink: "Délier le listing",
+    discUnlinked: "Serveur délié du listing.",
+    discSent: "Commande envoyée — vérifie la console ci-dessus.",
+    discNote: "Le serveur envoie un heartbeat toutes les 2 min. Arrêté > 2 min, il disparaît de la liste puis revient seul.",
+    discOffline: "Démarre le serveur pour lier ton listing de découverte.",
+    pluginsTitle: "Plugins & mods (Paper)",
+    pluginsDesc: "Ajoute des plugins à ton serveur. Téléverse un fichier .jar (Modrinth, SpigotMC, Hangar) — il est placé dans /plugins. Redémarre pour les activer.",
+    pluginsEmpty: "Aucun plugin installé pour l'instant.",
+    pluginsUpload: "Téléverser un plugin (.jar)",
+    pluginsUploading: "Téléversement…",
+    pluginsRestartHint: "Redémarre le serveur pour appliquer les changements.",
+    pluginsRestart: "Redémarrer pour appliquer",
+    pluginsDelete: "Supprimer ce plugin ?",
+    pluginsOffline: "Démarre le serveur pour gérer tes plugins.",
+    pluginsOnlyJar: "Seuls les fichiers .jar sont acceptés.",
     playersTitle: "Joueurs",
     connected: "Connectés",
     giveOp: "Donner OP",
@@ -357,7 +419,26 @@ const fr = {
 
 const en: Dict = {
   langName: "English (US)",
-  nav: { plans: "Plans", blog: "Blog", games: "Games — soon", mods: "Mods", login: "Sign in" },
+  nav: { plans: "Plans", blog: "Blog", games: "Games — soon", mods: "Mods", login: "Sign in", dashboard: "Dashboard", logout: "Sign out" },
+  promoBanner: "🎉 Launch promo: -{pct}% off all paid plans — limited time!",
+  survey: {
+    button: "Feedback",
+    title: "Help us improve Playrena",
+    intro: "30 seconds — it helps us a lot 🙏",
+    rating: "Your experience",
+    source: "How did you hear about Playrena?",
+    usecase: "Why a server?",
+    game: "Which game interests you most?",
+    message: "What's missing or would make you come back?",
+    email: "Email (optional — to follow up)",
+    send: "Send",
+    sending: "Sending…",
+    thanks: "Thanks! 🎉 Your feedback helps us improve the site.",
+    close: "Close",
+    sources: { reddit: "Reddit", discord: "Discord", friend: "A friend", google: "Google", other: "Other" },
+    usecases: { friends: "With friends", community: "Community", test: "Try a game", other: "Other" },
+    games: { minecraft: "Minecraft", hytale: "Hytale", satisfactory: "Satisfactory", other: "Other" },
+  },
   rating: "Dedicated servers",
   ratingSuffix: "Made in Canada",
   hero: {
@@ -539,11 +620,18 @@ const en: Dict = {
   srv: {
     connAddress: "Connection address",
     authTitle: "Hytale authorization required",
-    authDesc: "Your Hytale server must be authorized with your Hytale account on first launch. Open the link, sign in and enter the code below.",
+    authDesc: "Your Hytale server must be authorized with your Hytale account on first launch. Follow the steps below — this page updates on its own.",
     authStep: "Step {n} of 2",
-    authVisit: "Open authorization page",
+    authVisit: "Open Hytale authorization page",
+    authStepLogin: "Sign in with your Hytale account (the server will be tied to YOUR account).",
+    authStepCode: "Enter this code, then click “Authorize”:",
     authCode: "Code",
-    authWaiting: "Waiting for authorization… this page updates automatically.",
+    authCopy: "Copy code",
+    authCopied: "Copied!",
+    authPreparing: "Preparing the server (starting / downloading)… the authorization link will appear here.",
+    authWaiting: "Waiting for your authorization… once done, the server starts automatically.",
+    authGoneTitle: "Server not found",
+    authGoneDesc: "This server's container no longer exists (deleted or cleaned up). Delete it and create a new Hytale server.",
     authRaw: "Server output (look for an authorization link):",
     authManual: "If no button appears, copy the link/code from the logs below (or the console further down).",
     version: "version",
@@ -551,6 +639,7 @@ const en: Dict = {
     changePlan: "Change plan",
     currentPlan: "Current plan:",
     paidNeedSub: "Paid plans require a subscription.",
+    promoFree: "Free (promo): {n} GB included, at no cost.",
     core: "core",
     cores: "cores",
     current: "current",
@@ -573,6 +662,29 @@ const en: Dict = {
     cmdPlaceholder: "command (e.g. say hi, time set day, op Username)",
     send: "Send",
     consoleOffline: "Start the server to access the console and see connected players.",
+    consoleHytaleHint: "Hytale has no RCON console: authorization happens via the link above (the server detects it automatically).",
+    cmdPlaceholderHytale: "Hytale console command (e.g. discovery link <token>)",
+    discTitle: "Public listing (Hytale browser)",
+    discDesc: "Make your server show up in Hytale's in-game server browser. Optional — your server works without it.",
+    discStep1: "Create/edit your listing on",
+    discStep2: "Copy the discovery token shown and paste it below.",
+    discPlaceholder: "discovery token",
+    discApply: "Link",
+    discUnlink: "Unlink listing",
+    discUnlinked: "Server unlinked from listing.",
+    discSent: "Command sent — check the console above.",
+    discNote: "The server sends a heartbeat every 2 min. If stopped > 2 min it drops off the list, then returns on its own.",
+    discOffline: "Start the server to link your discovery listing.",
+    pluginsTitle: "Plugins & mods (Paper)",
+    pluginsDesc: "Add plugins to your server. Upload a .jar file (Modrinth, SpigotMC, Hangar) — it goes into /plugins. Restart to enable them.",
+    pluginsEmpty: "No plugins installed yet.",
+    pluginsUpload: "Upload a plugin (.jar)",
+    pluginsUploading: "Uploading…",
+    pluginsRestartHint: "Restart the server to apply changes.",
+    pluginsRestart: "Restart to apply",
+    pluginsDelete: "Delete this plugin?",
+    pluginsOffline: "Start the server to manage your plugins.",
+    pluginsOnlyJar: "Only .jar files are accepted.",
     playersTitle: "Players",
     connected: "Connected",
     giveOp: "Give OP",
@@ -660,15 +772,26 @@ interface Ctx {
   lang: Lang;
   setLang: (l: Lang) => void;
   t: Dict;
+  promo: number; // rabais global actif en % (0 = aucun)
 }
-const LangContext = createContext<Ctx>({ lang: "fr", setLang: () => {}, t: fr });
+const LangContext = createContext<Ctx>({ lang: "fr", setLang: () => {}, t: fr, promo: 0 });
 
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+export function LanguageProvider({ children, initialPromo = 0 }: { children: React.ReactNode; initialPromo?: number }) {
   const [lang, setLangState] = useState<Lang>("fr");
+  // Init depuis la valeur SSR (rendue côté serveur) → le prix réduit s'affiche dès le 1er
+  // rendu (pas de flash) ET pas de mismatch d'hydratation (même valeur serveur/client).
+  const [promo, setPromo] = useState(() => { setPromoFactor(initialPromo); return initialPromo; });
 
   useEffect(() => {
     const saved = (typeof localStorage !== "undefined" && localStorage.getItem("lang")) as Lang | null;
     if (saved === "fr" || saved === "en") setLangState(saved);
+    // Re-fetch côté client pour rester à jour si la promo a changé depuis le rendu serveur.
+    fetch(`${API_BASE}/api/v1/promo`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { const p = Number(d?.percent) || 0; setPromoFactor(p); setPromo(p); })
+      .catch(() => {});
   }, []);
 
   const setLang = (l: Lang) => {
@@ -677,7 +800,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     if (typeof document !== "undefined") document.documentElement.lang = l;
   };
 
-  return <LangContext.Provider value={{ lang, setLang, t: dicts[lang] }}>{children}</LangContext.Provider>;
+  return <LangContext.Provider value={{ lang, setLang, t: dicts[lang], promo }}>{children}</LangContext.Provider>;
 }
 
 export const useI18n = () => useContext(LangContext);

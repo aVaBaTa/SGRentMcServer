@@ -52,6 +52,23 @@ func (o *Orchestrator) BestNode(ctx context.Context, requiredRAMMb int64) (*Node
 	return best, nil
 }
 
+// NodeWithCapacity retourne un node précis (épinglage) s'il a assez de RAM libre.
+// Utilisé pour les jeux à IP directe qu'on veut sur un node fixe (NAT simple).
+func (o *Orchestrator) NodeWithCapacity(ctx context.Context, id string, requiredRAMMb int64) (*Node, error) {
+	node, err := o.NodeByID(id)
+	if err != nil {
+		return nil, err
+	}
+	stats, err := node.Stats(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("node %q unavailable: %w", id, err)
+	}
+	if stats.FreeRAMMB < requiredRAMMb {
+		return nil, fmt.Errorf("pinned node %q full: %d MB free < %d MB required", id, stats.FreeRAMMB, requiredRAMMb)
+	}
+	return node, nil
+}
+
 func (o *Orchestrator) NodeByID(id string) (*Node, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()

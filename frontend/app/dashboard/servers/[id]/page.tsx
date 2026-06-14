@@ -3,19 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight, KeyRound } from "lucide-react";
-import { useI18n } from "@/lib/i18n";
+import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight, KeyRound, Copy, Check, Loader2, ExternalLink, AlertTriangle, Globe } from "lucide-react";
+import { useI18n, PLANS as BASE_PLANS, priceFor, fmtMoney } from "@/lib/i18n";
+import { getGame } from "@/lib/games";
 import { LanguageSwitcher } from "@/components/site-chrome";
 
 const VERSIONS = ["LATEST", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.18.2", "1.16.5", "1.12.2", "1.8.9"];
-
-const PLANS = [
-  { id: "free", ram: "1 GB", cores: 1, price: "0$" },
-  { id: "starter", ram: "2 GB", cores: 1, price: "2$/mo" },
-  { id: "standard", ram: "4 GB", cores: 2, price: "5$/mo" },
-  { id: "pro", ram: "8 GB", cores: 4, price: "9$/mo" },
-  { id: "extreme", ram: "16 GB", cores: 6, price: "16$/mo" },
-];
 
 interface GameServer {
   id: string;
@@ -44,7 +37,7 @@ const STATUS_META: Record<string, { dot: string; text: string; pulse?: boolean }
 export default function ServerPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [server, setServer] = useState<GameServer | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState("");
@@ -73,6 +66,11 @@ export default function ServerPage() {
   const [sending, setSending] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
 
+  // Discovery (listing public Hytale)
+  const [discToken, setDiscToken] = useState("");
+  const [discBusy, setDiscBusy] = useState(false);
+  const [discMsg, setDiscMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   // Gestion des joueurs
   const [lists, setLists] = useState<{ whitelist: string[]; banned: string[] }>({ whitelist: [], banned: [] });
   const [newPlayer, setNewPlayer] = useState("");
@@ -89,6 +87,10 @@ export default function ServerPage() {
   const [editTrunc, setEditTrunc] = useState(false);
   const [savingFile, setSavingFile] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // Plugins Minecraft (dossier /plugins, image Paper)
+  const [plugins, setPlugins] = useState<FileEntry[]>([]);
+  const [pluginUploading, setPluginUploading] = useState(false);
 
   // Charge la config billing + le SDK PayPal
   useEffect(() => {
@@ -151,15 +153,31 @@ export default function ServerPage() {
     setLoading(false);
   }
 
-  // Authentification interactive (Hytale) : poll de l'URL+code OAuth
-  const [authInfo, setAuthInfo] = useState<{ pending: boolean; step?: number; url?: string; code?: string; raw?: string[] } | null>(null);
+  // Authentification interactive (Hytale) : poll de l'URL+code OAuth + logs live.
+  const [authInfo, setAuthInfo] = useState<{ pending: boolean; step?: number; url?: string; code?: string; raw?: string[]; booting?: boolean; gone?: boolean } | null>(null);
+  const [copied, setCopied] = useState(false);
   const authRequired = server?.status === "auth_required";
+
+  const copyCode = async (code: string) => {
+    try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* clipboard bloqué */ }
+  };
+
   useEffect(() => {
     if (!authRequired) { setAuthInfo(null); return; }
     const tick = async () => {
       try {
-        const res = await fetch(`${API}/api/v1/servers/${id}/auth`, { credentials: "include" });
-        if (res.ok) setAuthInfo(await res.json());
+        // Auth + logs en parallèle : pendant l'auth, la console reste visible et live
+        // (le client voit le téléchargement, le device-code, puis le passage en running).
+        const [a, l] = await Promise.all([
+          fetch(`${API}/api/v1/servers/${id}/auth`, { credentials: "include" }),
+          fetch(`${API}/api/v1/servers/${id}/logs?tail=200`, { credentials: "include" }),
+        ]);
+        if (a.ok) setAuthInfo(await a.json());
+        if (l.ok) {
+          const stick = logRef.current && logRef.current.scrollTop + logRef.current.clientHeight >= logRef.current.scrollHeight - 40;
+          setLogs((await l.json()).logs ?? "");
+          if (stick) requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; });
+        }
       } catch { /* serveur pas prêt */ }
     };
     tick();
@@ -171,22 +189,27 @@ export default function ServerPage() {
   const running = server?.status === "running";
   useEffect(() => {
     if (!running) { setPlayers(null); return; }
+    // Joueurs/whitelist = RCON (Minecraft uniquement). Hytale n'a pas de RCON → on
+    // ne récupère que les logs (sinon compteur trompeur 0/0).
+    const isMc = server?.game === "minecraft";
     const tick = async () => {
       try {
-        const [p, l, pl] = await Promise.all([
-          fetch(`${API}/api/v1/servers/${id}/players`, { credentials: "include" }),
-          fetch(`${API}/api/v1/servers/${id}/logs?tail=200`, { credentials: "include" }),
-          fetch(`${API}/api/v1/servers/${id}/playerlists`, { credentials: "include" }),
-        ]);
-        if (p.ok) setPlayers(await p.json());
+        const l = await fetch(`${API}/api/v1/servers/${id}/logs?tail=200`, { credentials: "include" });
         if (l.ok) {
           const stick = logRef.current && logRef.current.scrollTop + logRef.current.clientHeight >= logRef.current.scrollHeight - 40;
           setLogs((await l.json()).logs ?? "");
           if (stick) requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; });
         }
-        if (pl.ok) {
-          const d = await pl.json();
-          setLists({ whitelist: d.whitelist ?? [], banned: d.banned ?? [] });
+        if (isMc) {
+          const [p, pl] = await Promise.all([
+            fetch(`${API}/api/v1/servers/${id}/players`, { credentials: "include" }),
+            fetch(`${API}/api/v1/servers/${id}/playerlists`, { credentials: "include" }),
+          ]);
+          if (p.ok) setPlayers(await p.json());
+          if (pl.ok) {
+            const d = await pl.json();
+            setLists({ whitelist: d.whitelist ?? [], banned: d.banned ?? [] });
+          }
         }
       } catch { /* serveur pas prêt */ }
     };
@@ -194,6 +217,12 @@ export default function ServerPage() {
     const t = setInterval(tick, 5000);
     return () => clearInterval(t);
   }, [id, running]);
+
+  // Charge la liste des plugins quand un serveur Minecraft tourne.
+  useEffect(() => {
+    if (running && server?.game === "minecraft") loadPlugins();
+    else setPlugins([]);
+  }, [id, running, server?.game]);
 
   async function doPlayerAction(action: string, player: string) {
     const p = player.trim();
@@ -314,6 +343,46 @@ export default function ServerPage() {
     window.open(`${API}/api/v1/servers/${id}/files/download?path=${encodeURIComponent(p)}`, "_blank");
   }
 
+  // ----- Plugins Minecraft (dossier /plugins) -----
+  async function loadPlugins() {
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/files?path=${encodeURIComponent("/plugins")}`, { credentials: "include" });
+      if (!res.ok) { setPlugins([]); return; } // dossier pas encore créé
+      const list: FileEntry[] = (await res.json()) ?? [];
+      setPlugins(list.filter((e) => !e.is_dir && e.name.toLowerCase().endsWith(".jar")));
+    } catch { setPlugins([]); }
+  }
+
+  async function uploadPlugin(f: File) {
+    if (!f.name.toLowerCase().endsWith(".jar")) { alert(t.srv.pluginsOnlyJar); return; }
+    setPluginUploading(true);
+    try {
+      // S'assure que /plugins existe (ignore l'erreur s'il existe déjà).
+      await fetch(`${API}/api/v1/servers/${id}/files/mkdir`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: "/plugins" }),
+      }).catch(() => {});
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await fetch(`${API}/api/v1/servers/${id}/files/upload?path=${encodeURIComponent("/plugins")}`, {
+        method: "POST", credentials: "include", body: fd,
+      });
+      if (res.ok) await loadPlugins();
+      else alert(t.srv.uploadFail);
+    } finally {
+      setPluginUploading(false);
+    }
+  }
+
+  async function deletePlugin(name: string) {
+    if (!confirm(t.srv.pluginsDelete + "\n" + name)) return;
+    const res = await fetch(`${API}/api/v1/servers/${id}/files`, {
+      method: "DELETE", credentials: "include",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: "/plugins/" + name }),
+    });
+    if (res.ok) await loadPlugins();
+  }
+
   async function sendCommand(e: React.FormEvent) {
     e.preventDefault();
     const cmd = command.trim();
@@ -334,6 +403,30 @@ export default function ServerPage() {
       setCommand("");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function applyDiscovery(unlink: boolean) {
+    if (discBusy) return;
+    const token = discToken.trim();
+    if (!unlink && !token) return;
+    setDiscBusy(true); setDiscMsg(null);
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/discovery`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(unlink ? { unlink: true } : { token }),
+      });
+      if (res.ok) {
+        setDiscMsg({ ok: true, text: unlink ? t.srv.discUnlinked : t.srv.discSent });
+        if (!unlink) setDiscToken("");
+      } else {
+        setDiscMsg({ ok: false, text: t.srv.errPrefix + (await res.text()) });
+      }
+    } catch (e: any) {
+      setDiscMsg({ ok: false, text: t.srv.errPrefix + String(e) });
+    } finally {
+      setDiscBusy(false);
     }
   }
 
@@ -380,6 +473,27 @@ export default function ServerPage() {
   if (loading) return <div className="p-8 text-zinc-400">{t.dash.loading}</div>;
   if (!server) return null;
 
+  // Plans affichés pour CE serveur : source partagée (lib/i18n), RAM relevée au
+  // plancher du jeu, prix dans la devise courante. Jeux offerts (freeAtFloor :
+  // Satisfactory, Hytale) → seul le plan gratuit, au plancher (plans payants masqués).
+  const gameDef = getGame(server.game);
+  const floor = gameDef?.minRamGb ?? 0;
+  const freeAtFloor = gameDef?.freeAtFloor ?? false;
+  const plans = BASE_PLANS
+    .filter((p) => !freeAtFloor || p.id === "free")
+    .map((p) => {
+      const pr = priceFor(p, lang, "monthly");
+      return {
+        id: p.id,
+        ram: `${Math.max(parseInt(p.ram), floor)} GB`,
+        cores: p.cpu,
+        price: p.id === "free"
+          ? t.pricing.free
+          : `${fmtMoney(pr.monthly, lang)}${t.pricing.perMonth}`,
+        priceOriginal: p.id !== "free" && pr.promoActive ? fmtMoney(pr.originalMonthly, lang) : "",
+      };
+    });
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Nav */}
@@ -393,7 +507,7 @@ export default function ServerPage() {
           <span className={`w-2 h-2 rounded-full ${statusMeta(server.status).dot} ${statusMeta(server.status).pulse ? "animate-pulse" : ""}`} />
           {statusLabel(server.status)}
         </span>
-        {running && players && (
+        {running && players && server.game === "minecraft" && (
           <span className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-zinc-800 text-zinc-300">
             <Users className="w-3.5 h-3.5 text-green-400" />
             {players.online} / {players.max} {t.pricing.players}
@@ -440,42 +554,82 @@ export default function ServerPage() {
           </div>
         </div>
 
-        {/* Autorisation interactive (Hytale) : OAuth device-code */}
+        {/* Autorisation interactive (Hytale) : OAuth device-code — le client autorise
+            avec SON compte Hytale ; l'image poll automatiquement → passage en running. */}
         {authRequired && (
-          <div className="border border-amber-800/60 bg-amber-950/20 rounded-xl p-6 flex flex-col gap-3">
-            <div className="flex items-center gap-2 font-semibold text-amber-300">
+          <div className="border border-amber-700/60 bg-gradient-to-b from-amber-950/30 to-zinc-900 rounded-xl p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-2 font-semibold text-amber-300 text-lg">
               <KeyRound className="w-5 h-5" /> {t.srv.authTitle}
               {authInfo?.step ? (
-                <span className="text-xs font-normal text-amber-400/80">· {t.srv.authStep.replace("{n}", String(authInfo.step))}</span>
+                <span className="text-xs font-normal text-amber-400/70 ml-auto">{t.srv.authStep.replace("{n}", String(authInfo.step))}</span>
               ) : null}
             </div>
-            <p className="text-sm text-zinc-300">{t.srv.authDesc}</p>
-            {authInfo?.pending && authInfo.url ? (
-              <div className="flex flex-col gap-3">
-                <a
-                  href={authInfo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex w-fit items-center gap-2 bg-amber-500 hover:bg-amber-400 text-black font-semibold px-5 py-2.5 rounded-lg transition-colors"
-                >
-                  {t.srv.authVisit}
-                </a>
-                {authInfo.code && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-zinc-400">{t.srv.authCode}</span>
-                    <code className="font-mono text-lg tracking-widest text-amber-300 bg-black/40 px-3 py-1 rounded-md">{authInfo.code}</code>
-                  </div>
-                )}
+
+            {/* Container disparu → recréer */}
+            {authInfo?.gone ? (
+              <div className="flex items-start gap-3 rounded-lg border border-red-800/60 bg-red-950/30 p-4 text-sm text-red-300">
+                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">{t.srv.authGoneTitle}</p>
+                  <p className="text-red-300/80 mt-1">{t.srv.authGoneDesc}</p>
+                </div>
               </div>
-            ) : null}
-            {authInfo?.raw && authInfo.raw.length > 0 && (
+            ) : authInfo?.pending && authInfo.url ? (
+              <>
+                <p className="text-sm text-zinc-300">{t.srv.authDesc}</p>
+                {/* Étapes claires */}
+                <ol className="flex flex-col gap-2.5">
+                  <li className="flex items-center gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500 text-black text-xs font-bold">1</span>
+                    <a
+                      href={authInfo.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" /> {t.srv.authVisit}
+                    </a>
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-zinc-300">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold">2</span>
+                    {t.srv.authStepLogin}
+                  </li>
+                  {authInfo.code && (
+                    <li className="flex items-center gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold">3</span>
+                      <span className="text-sm text-zinc-300">{t.srv.authStepCode}</span>
+                      <button
+                        onClick={() => copyCode(authInfo.code!)}
+                        title={t.srv.authCopy}
+                        className="inline-flex items-center gap-2 font-mono text-lg tracking-[0.3em] text-amber-300 bg-black/50 hover:bg-black/70 border border-amber-800/50 px-3 py-1 rounded-md transition-colors"
+                      >
+                        {authInfo.code}
+                        {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-zinc-400" />}
+                      </button>
+                      {copied && <span className="text-xs text-green-400">{t.srv.authCopied}</span>}
+                    </li>
+                  )}
+                </ol>
+                <div className="flex items-center gap-2 text-xs text-amber-300/70">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> {t.srv.authWaiting}
+                </div>
+              </>
+            ) : (
+              /* Booting : container vivant mais pas encore d'URL (démarrage/téléchargement) */
+              <div className="flex items-center gap-3 text-sm text-zinc-300">
+                <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                <span>{t.srv.authPreparing}</span>
+              </div>
+            )}
+
+            {/* Repli : lignes de logs pertinentes si le parsing n'a pas trouvé le lien */}
+            {authInfo?.raw && authInfo.raw.length > 0 && !authInfo.url && (
               <div>
                 <div className="text-xs text-zinc-500 mb-1">{t.srv.authRaw}</div>
                 <pre className="max-h-40 overflow-auto bg-black/50 rounded-lg p-3 text-[11px] font-mono text-amber-200/90 whitespace-pre-wrap break-words">{authInfo.raw.join("\n")}</pre>
                 <p className="text-xs text-zinc-500 mt-2">{t.srv.authManual}</p>
               </div>
             )}
-            <p className="text-xs text-zinc-500">{t.srv.authWaiting}</p>
           </div>
         )}
 
@@ -484,12 +638,15 @@ export default function ServerPage() {
           <div className="flex items-center gap-2 font-semibold mb-1">
             <ArrowUpCircle className="w-5 h-5 text-green-400" /> {t.srv.changePlan}
           </div>
-          <p className="text-sm text-zinc-500 mb-4">
+          <p className="text-sm text-zinc-500 mb-1">
             {t.srv.currentPlan} <span className="text-zinc-300 capitalize">{server.plan}</span>.
-            {" "}{t.srv.paidNeedSub}
+            {!freeAtFloor && <>{" "}{t.srv.paidNeedSub}</>}
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
-            {PLANS.map((p) => {
+          {freeAtFloor && (
+            <p className="text-sm text-green-400/90 mb-4">{t.srv.promoFree.replace("{n}", String(floor))}</p>
+          )}
+          <div className={`grid grid-cols-2 gap-2 mb-4 ${freeAtFloor ? "sm:grid-cols-3 mt-3" : "sm:grid-cols-5"}`}>
+            {plans.map((p) => {
               const current = p.id === server.plan;
               const sel = p.id === selectedPlan;
               return (
@@ -505,7 +662,7 @@ export default function ServerPage() {
                 >
                   <div className="font-semibold text-sm">{t.planNames[p.id]}</div>
                   <div className="text-zinc-400">{p.ram} · {p.cores} {p.cores > 1 ? t.srv.cores : t.srv.core}</div>
-                  <div className="text-zinc-500 mt-1">{p.price}</div>
+                  <div className="text-zinc-500 mt-1">{p.priceOriginal && <s className="text-zinc-600 mr-1">{p.priceOriginal}</s>}{p.price}</div>
                   {current && <div className="text-[10px] text-green-400 mt-1">{t.srv.current}</div>}
                   {p.id !== "free" && <div className="text-[10px] text-zinc-600 mt-1">{t.srv.subscription}</div>}
                 </button>
@@ -516,7 +673,7 @@ export default function ServerPage() {
             <div className="mb-4 rounded-lg border border-indigo-900 bg-indigo-950/30 px-4 py-3 text-sm text-indigo-300">
               {t.srv.planPayHint
                 .replace("{plan}", t.planNames[selectedPlan] ?? selectedPlan)
-                .replace("{price}", PLANS.find((p) => p.id === selectedPlan)?.price ?? "")}
+                .replace("{price}", plans.find((p) => p.id === selectedPlan)?.price ?? "")}
             </div>
           )}
           {selectedPlan && selectedPlan !== "free" ? (
@@ -576,7 +733,7 @@ export default function ServerPage() {
             <div className="flex items-center gap-2 font-semibold">
               <Terminal className="w-5 h-5 text-green-400" /> {t.srv.console}
             </div>
-            {running && players && (
+            {running && players && server.game === "minecraft" && (
               <span className="flex items-center gap-1.5 text-xs text-zinc-400">
                 <Users className="w-3.5 h-3.5" />
                 {players.online}/{players.max}
@@ -584,19 +741,20 @@ export default function ServerPage() {
               </span>
             )}
           </div>
-          {running ? (
+          {running || authRequired ? (
             <>
               <pre ref={logRef} className="h-72 overflow-auto bg-black/60 rounded-lg p-3 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
                 {logs || t.srv.logsLoading}
               </pre>
-              {/* Saisie de commande : RCON, Minecraft uniquement */}
-              {server.game === "minecraft" && (
+              {/* Saisie de commande : Minecraft (RCON) ou Hytale (stdin). Pour Hytale la
+                  sortie apparaît dans les logs ci-dessus (pas de retour direct). */}
+              {(server.game === "minecraft" || server.game === "hytale") && running && (
               <form onSubmit={sendCommand} className="mt-3 flex gap-2">
-                <span className="flex items-center text-zinc-500 font-mono text-sm">/</span>
+                {server.game === "minecraft" && <span className="flex items-center text-zinc-500 font-mono text-sm">/</span>}
                 <input
                   value={command}
                   onChange={(e) => setCommand(e.target.value)}
-                  placeholder={t.srv.cmdPlaceholder}
+                  placeholder={server.game === "hytale" ? t.srv.cmdPlaceholderHytale : t.srv.cmdPlaceholder}
                   className="flex-1 bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:outline-none focus:border-green-500"
                 />
                 <button type="submit" disabled={sending || !command.trim()}
@@ -605,11 +763,57 @@ export default function ServerPage() {
                 </button>
               </form>
               )}
+              {/* Hytale en attente d'auth : pas de console tant qu'il n'est pas running. */}
+              {server.game === "hytale" && authRequired && (
+                <p className="mt-3 text-xs text-zinc-500">{t.srv.consoleHytaleHint}</p>
+              )}
             </>
           ) : (
             <p className="text-sm text-zinc-500">{t.srv.consoleOffline}</p>
           )}
         </div>
+
+        {/* Listing public Hytale (discovery / server browser in-game) */}
+        {server.game === "hytale" && (
+        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+          <div className="flex items-center gap-2 font-semibold mb-1">
+            <Globe className="w-5 h-5 text-sky-400" /> {t.srv.discTitle}
+          </div>
+          <p className="text-sm text-zinc-500 mb-4">{t.srv.discDesc}</p>
+          {running ? (
+            <>
+              <ol className="text-sm text-zinc-400 mb-4 flex flex-col gap-1.5 list-decimal list-inside">
+                <li>{t.srv.discStep1}{" "}
+                  <a href="https://hytale.com" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline inline-flex items-center gap-1">hytale.com <ExternalLink className="w-3 h-3" /></a>
+                </li>
+                <li>{t.srv.discStep2}</li>
+              </ol>
+              <div className="flex gap-2">
+                <input
+                  value={discToken}
+                  onChange={(e) => setDiscToken(e.target.value)}
+                  placeholder={t.srv.discPlaceholder}
+                  className="flex-1 bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                />
+                <button onClick={() => applyDiscovery(false)} disabled={discBusy || !discToken.trim()}
+                  className="flex items-center gap-2 bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+                  {discBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />} {t.srv.discApply}
+                </button>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <button onClick={() => applyDiscovery(true)} disabled={discBusy}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 underline disabled:opacity-40">{t.srv.discUnlink}</button>
+                {discMsg && (
+                  <span className={`text-xs ${discMsg.ok ? "text-green-400" : "text-red-400"}`}>{discMsg.text}</span>
+                )}
+              </div>
+              <p className="mt-3 text-xs text-zinc-600">{t.srv.discNote}</p>
+            </>
+          ) : (
+            <p className="text-sm text-zinc-500">{t.srv.discOffline}</p>
+          )}
+        </div>
+        )}
 
         {/* Gestion des joueurs : RCON, Minecraft uniquement */}
         {server.game === "minecraft" && (
@@ -797,11 +1001,44 @@ export default function ServerPage() {
           </div>
         )}
 
-        {/* Sections à venir */}
-        <div className="border border-dashed border-zinc-800 rounded-xl p-6">
-          <div className="font-semibold mb-1">{t.srv.modsTitle}</div>
-          <div className="text-sm text-zinc-500">{t.srv.modsDesc}</div>
+        {/* Plugins & mods — Minecraft (Paper, dossier /plugins) */}
+        {server.game === "minecraft" && (
+        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+          <div className="flex items-center gap-2 font-semibold mb-1">
+            <FolderPlus className="w-5 h-5 text-green-400" /> {t.srv.pluginsTitle}
+          </div>
+          <p className="text-sm text-zinc-500 mb-4">{t.srv.pluginsDesc}</p>
+          {running ? (
+            <>
+              {plugins.length > 0 ? (
+                <ul className="flex flex-col gap-1.5 mb-4">
+                  {plugins.map((p) => (
+                    <li key={p.name} className="flex items-center justify-between bg-black/30 rounded-lg px-3 py-2 text-sm">
+                      <span className="font-mono text-zinc-300 truncate">{p.name}</span>
+                      <button onClick={() => deletePlugin(p.name)} title={t.srv.pluginsDelete}
+                        className="shrink-0 text-zinc-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-zinc-600 mb-4">{t.srv.pluginsEmpty}</p>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <label className={`inline-flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black font-medium px-4 py-2 rounded-lg text-sm cursor-pointer transition-colors ${pluginUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                  <Upload className="w-4 h-4" /> {pluginUploading ? t.srv.pluginsUploading : t.srv.pluginsUpload}
+                  <input type="file" accept=".jar" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPlugin(f); e.currentTarget.value = ""; }} />
+                </label>
+                <button onClick={() => action("restart")} className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-blue-900/60 text-blue-300 px-4 py-2 rounded-lg text-sm transition-colors">
+                  <RefreshCw className="w-4 h-4" /> {t.srv.pluginsRestart}
+                </button>
+              </div>
+              <p className="text-xs text-zinc-600 mt-3">{t.srv.pluginsRestartHint} — Modrinth · SpigotMC · Hangar.</p>
+            </>
+          ) : (
+            <p className="text-sm text-zinc-500">{t.srv.pluginsOffline}</p>
+          )}
         </div>
+        )}
 
         {/* Danger zone */}
         <div className="border border-red-900 rounded-xl p-6 mt-4">

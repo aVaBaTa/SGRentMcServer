@@ -180,7 +180,7 @@ export default function MinecraftHosting() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {PLANS.map((plan) => {
-            const { monthly, total, discount } = priceFor(plan, lang, period);
+            const { monthly, total, discount, originalMonthly, promoActive } = priceFor(plan, lang, period);
             const isFree = plan.id === "free";
             return (
               <div
@@ -196,7 +196,10 @@ export default function MinecraftHosting() {
                 )}
                 <div>
                   <div className="font-bold text-lg">{t.planNames[plan.id]}</div>
-                  <div className="mt-1 flex items-end gap-1">
+                  <div className="mt-1 flex items-end gap-1.5 flex-wrap">
+                    {!isFree && promoActive && (
+                      <span className="text-zinc-500 text-lg line-through mb-0.5">{fmtMoney(originalMonthly, lang)}</span>
+                    )}
                     <span className="text-3xl font-extrabold">{isFree ? t.pricing.free : fmtMoney(monthly, lang)}</span>
                     {!isFree && <span className="text-zinc-500 text-sm mb-1">{t.pricing.perMonth}</span>}
                   </div>

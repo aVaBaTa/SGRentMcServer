@@ -3,11 +3,11 @@
 > Fichier de reprise rapide. Mentionne **« Playrena »** dans une nouvelle conversation
 > (le skill `playrena` charge ce fichier + l'état git) OU dis simplement
 > **« va lire PLAYRENA.md »**.
-> Dernière mise à jour : 2026-06-12.
+> Dernière mise à jour : 2026-06-14.
 
 ## 🔄 Reprise rapide (à exécuter au début d'une nouvelle conversation)
 
-1. Lire ce fichier en entier (archi, état des jeux, **backlog #A→#T**, blocage UDP).
+1. Lire ce fichier en entier (archi, état des jeux, **backlog #A→#Z**, blocage UDP).
 2. Récupérer les **commits récents des 3 repos** (SGRentMcServer travaille sur **`live`**) :
 
 ```bash
@@ -72,10 +72,14 @@ décide quand pusher. Convention de branche imposée : `Claude/feature/<desc>` (
   par jeu pilote image Docker, ports (`PortMapping` host↔interne+proto), volume (`DataPath`),
   routing (`UsesMCRouter`), planchers de ressources (`MinRAMMb`/`MinCPUCores`), `NeedsAuth`,
   et un builder d'env. **Ajouter un jeu = ajouter une entrée ici** (+ frontend).
-- **Ports** : `internal/servers/ports.go` alloue un « port de base » dans **25566–26065**
-  (25565 réservé à mc-router). La moitié haute **26066–26565** est réservée aux ports dérivés
-  (ex. messaging Satisfactory = base+500). Toute la plage `25566:26565` doit être ouverte au
-  pare-feu (TCP **et** UDP).
+- **Ports** : `internal/servers/ports.go` attribue à chaque serveur un **bloc contigu** de
+  `portBlockSize` (=16) ports `[base, base+16)` dans **25566–26565** (25565 réservé à mc-router).
+  **TOUS** les ports d'un jeu (jeu, query, messaging…) se dérivent de `base` **dans son bloc**
+  (offset < 16) → deux serveurs ne peuvent jamais se chevaucher, même avec des ports dérivés
+  consécutifs. **Jamais de port fixe en dur** (27015, 8766…) : on configure le jeu pour écouter
+  sur `base+offset` (cf. `NextAvailableBase` + cœur pur testable `firstFreeBlockBase`, tests dans
+  `ports_test.go`). 62 blocs ⇒ 62 serveurs simultanés (très au-delà de la capacité RAM). Toute la
+  plage `25566:26565` doit être ouverte au pare-feu (TCP **et** UDP).
 - **Frontend Next.js** (custom, voir `frontend/AGENTS.md`), build **standalone**, i18n FR/EN
   dans `frontend/lib/i18n.tsx` (dict `fr` typé, `en: Dict`). Plans tarifaires partagés dans
   `lib/i18n.tsx` (`PLANS`). Liste des jeux dans `frontend/lib/games.ts`.
@@ -86,9 +90,13 @@ décide quand pusher. Convention de branche imposée : `Claude/feature/<desc>` (
 | Jeu | Statut | Image | Port(s) | Volume | Notes |
 |---|---|---|---|---|---|
 | **Minecraft** | ✅ live | `itzg/minecraft-server` | 25565/tcp (mc-router par hostname) | `/data` | versions PAPER, RCON (console/joueurs), gratuit dès 1 Go |
-| **Satisfactory** | ✅ live | `wolveix/satisfactory-server` | base/udp (jeu) + base+500/tcp (messaging), identité | `/config` | plancher **4 Go gratuit** (promo), IP:port direct, pas de RCON |
+| **Satisfactory** | ✅ live | `wolveix/satisfactory-server` | base/udp+tcp (jeu) + base+1/tcp (messaging), identité, **dans le bloc** | `/config` | plancher **4 Go gratuit** (promo), IP:port direct, pas de RCON |
 | **Hytale** | ✅ live | `ghcr.io/terkea/hytale-server` | base/udp (QUIC, `SERVER_PORT`) | `/data` | plancher **10 Go** (réaliste, assumé non rentable), **fichiers pré-téléchargés** (seed → pas de re-download) → le **client** ne fait que l'**auth serveur** (device-code, panel affiche URL+code), IP:port direct |
 | Rust, ARK | ⏳ soon | — | — | — | marqués « Bientôt » dans `games.ts` |
+
+**Catalogue à étendre (backlog #U)** : Palworld, Terraria, The Forest, 7 Days to Die, Valheim,
+ARK: Survival Evolved, ARK: Survival Ascended, Stardew Valley + autres candidats populaires.
+📄 **Specs techniques (image Docker, ports, RAM, pièges) : `docs/jeux-populaires-a-ajouter.md`.**
 
 **Flux d'auth Hytale** (`internal/server/handlers_auth.go`) : à la 1ʳᵉ création, un watcher
 détaché lit les logs, détecte le prompt OAuth Hytale (`oauth.accounts.hytale.com`), passe le
@@ -109,13 +117,22 @@ relevé à **10 Go** (2026-06-12, réaliste/stable) — décision produit assum�
 
 ## Déploiement (sur xe80dell)
 
+> ✅ **Le plus simple : `./scripts/deploy.sh`** (tout) ou `./scripts/deploy.sh api|monitor|frontend`.
+> Le script encapsule **tous** les env/mounts/réseaux (source `.env`) → évite les oublis qui cassent
+> des features (SSR promo `INTERNAL_API_URL`, seed Hytale `SEED_DIR`, admin token, réseaux du monitor).
+> Les commandes manuelles ci-dessous restent la référence.
+
 ```bash
 # Backend
 cd ~/Shared_Projects/2026/SGRentMcServer && docker compose up -d --build api
 # Frontend (container standalone, PAS dans compose)
 cd ~/Shared_Projects/2026/SGRentMcServer/frontend && docker build -t mcserver-frontend:latest .
 docker rm -f mcserver-frontend && docker run -d --name mcserver-frontend \
-  --restart unless-stopped --network sgportfolio_portfolio-net mcserver-frontend:latest
+  --restart unless-stopped -e INTERNAL_API_URL="http://mcserver-api:8080" \
+  --network sgportfolio_portfolio-net mcserver-frontend:latest
+# ⚠️ INTERNAL_API_URL = pour le SSR de la promo (#Y) : le layout fetch /api/v1/promo côté
+#   serveur. Sans cet env il retombe sur l'URL publique (timeout 2s → promo SSR = 0 jusqu'à
+#   la revalidation ISR ; le client corrige quand même). Toujours le mettre au redéploiement.
 # Pare-feu jeux (node1 + node2) — requis pour Satisfactory/Hytale
 sudo ufw allow 25566:26565/udp && sudo ufw allow 25566:26565/tcp
 ```
@@ -131,7 +148,16 @@ sudo ufw allow 25566:26565/udp && sudo ufw allow 25566:26565/tcp
 ## Fait (2026-06-10/11)
 
 - ✅ Dashboard par jeu (hub `/dashboard` + `/dashboard/[game]`, accent par jeu).
-- ✅ Chiffres `/games/satisfactory` & `/games/hytale` : plancher 4 Go affiché.
+- ✅ Chiffres `/games/satisfactory` (4 Go) & `/games/hytale` (**10 Go** depuis 2026-06-12) : plancher affiché.
+  Source unique = `frontend/lib/games.ts` (`minRamGb` + flag `freeAtFloor` pour les jeux offerts).
+- ✅ **Page serveur `/dashboard/servers/[id]` — plans à jour selon le jeu** (2026-06-12) : la section
+  « changement de plan » utilisait un tableau `PLANS` **codé en dur en double** (chiffres figés, sans
+  plancher) → remplacé par la **grille partagée** (`lib/i18n.tsx` `PLANS` + `priceFor`/`fmtMoney`,
+  devise FR/EN). RAM relevée au **plancher du jeu** (`Math.max(plan, minRamGb)`). Jeux `freeAtFloor`
+  (Satisfactory, Hytale) → **plans payants masqués**, plan gratuit affiché « offert au plancher »
+  (clé i18n `srv.promoFree`). Build Next.js OK. ⚠️ **frontend à rebuild/redeploy** pour prise d'effet.
+  Reste possible (non fait, hors scope demandé) : appliquer le même masquage promo sur les **pages
+  publiques** `/games/satisfactory` & `/games/hytale` (elles montrent encore la grille payante).
 - ✅ Rust & ARK : pages « être prévenu » (`/games/rust`, `/games/ark`) + composant `ComingSoonGame`.
 - ✅ Ping de latence sur les pages d'achat (composant `PingBadge`). ✅ #B corrigé **et déployé** : endpoint nginx `= /ping.ico` (réponse instantanée + `immutable` → Cloudflare sert en **HIT**, vérifié), badge pointé dessus en relatif (suit le domaine courant), warm-up + min sur 5 échantillons, préfixe `~`.
 - ✅ `PLAYRENA.md` + skill `~/.claude/skills/playrena/`.
@@ -211,20 +237,130 @@ téléchargé sur ma machine ») :
 - **Déployé** : `mcserver-api` rebuild (restart=0, `/seeds` monté, `SEED_DIR` OK). Build + tests verts.
 - ⚠️ **Capacité xe80dell** : 10 Go + overhead (~+50 % → ~15 Go cgroup) sur 31 Go total (≈10 Go déjà
   pris) ⇒ réaliste **1 serveur Hytale à la fois**. Assumé (non rentable).
+- **Correctif UI auth Hytale (2026-06-12, déployé api+frontend)** : « rien ne se passait » car
+  (a) container test orphelin (DB `auth_required` mais container supprimé) → nettoyé + endpoint
+  `/auth` renvoie maintenant `gone`/`booting`, (b) la **console n'était visible qu'en `running`**
+  → désormais **affichée live pendant `auth_required`** (le client voit le téléchargement + le
+  device-code). Nouvelle **belle carte d'auth** (`dashboard/servers/[id]/page.tsx`) : étapes 1-2-3,
+  bouton « Autoriser sur Hytale », **code copiable**, spinner, états `booting`/`gone`, i18n FR/EN.
+  Rappel : l'auth Hytale est **auto** (l'image poll seule) → le client n'a qu'à autoriser le lien.
+- **Console Hytale (stdin) + Listing « Discovery » (2026-06-12, déployé)** : Hytale n'a pas de RCON,
+  et le **token de découverte** (server browser in-game, Update 5) s'applique par **commande console
+  OP** (`discovery link <token>` ; aussi `discovery unlink`) — l'image n'accepte PAS le token en
+  env/config (vérifié). Donc :
+  - `GameDef.ConsoleStdin` (true pour Hytale) → conteneur créé avec **`OpenStdin`** ; `Node.SendStdin`
+    écrit la commande sur le stdin du serveur via Docker attach (pas de `CloseWrite`/EOF →
+    `StdinOnce=false`, stdin reste ouvert). `handleServerCommand` route vers stdin pour les jeux
+    `ConsoleStdin` (sinon rcon-cli). Endpoint **`POST /servers/{id}/discovery`** (`{token}` /
+    `{unlink:true}`, token validé par regex anti-injection).
+  - Frontend : **console tapable** pour Hytale en `running` (sortie dans les logs) + **carte « Listing
+    public (browser Hytale) »** (coller le token → bouton Lier → `discovery link`; bouton Délier).
+  - ⚠️ Le token discovery est **optionnel** (le serveur marche sans) ; ne marche qu'en `running`
+    (serveur authentifié). Heartbeat toutes les 2 min. **Non testé live** (besoin d'un serveur Hytale
+    authentifié) — `OpenStdin`+`StdinOnce=false` est la config standard (Pterodactyl) pour ça.
+- 💡 **Meilleure manière (recommandée, non faite)** : modèle **provider pre-auth (Model A)** —
+  Simon s'auth UNE fois → inject `HYTALE_SERVER_SESSION_TOKEN`/`IDENTITY_TOKEN` (comme le seed) →
+  **0 clic pour le client** (serveur déjà authentifié, aucune carte d'auth). À faire si on veut
+  l'UX la plus lisse (au prix : identité serveur = compte Simon, limite 500 serveurs/compte).
+- **TEST RÉEL réussi (2026-06-12)** : serveur Hytale créé **via le panel** (« Test », 10 Go),
+  device-code autorisé par le client → **authentifié**, logs `Skipping download` + `Listening on
+  0.0.0.0:25582` + **`Universe ready!`**. Le seed + l'auth + le démarrage fonctionnent **end-to-end**.
+  Conteneur créé avec `OpenStdin=true StdinOnce=false` (console/discovery prêts).
+- **Hytale CPU 2 → 4 cœurs (déployé)** : lag aux actions = **throttle CPU** (mesuré : conteneur
+  bridé à 2 cœurs mais voulait **2,77 cœurs** dès qu'on a relâché à 4). RAM idle = **1,3 Go** seulement
+  (plancher 10 Go très large → motive #V). `MinCPUCores: 4.0` dans `games.go` ; serveur courant bumpé
+  live (`docker update --cpus 4`) + DB synchro. CPU abondant (48 cœurs), donc généreux sans coût.
+- **Fix compteur joueurs « 0/0 » (déployé)** : `/players` passe par `rcon-cli` (Minecraft only) →
+  faux 0/0 pour Hytale **ET Satisfactory**. Frontend : compteur + fetch joueurs/whitelist **gatés
+  sur `minecraft`** (game-agnostique). Les jeux sans RCON n'affichent plus de compteur ; la console
+  (logs) reste visible. Input console = Minecraft (RCON) + Hytale (stdin) ; Satisfactory = aucun.
+- ⚠️ **Connectivité = NAT, PAS le serveur** : le serveur écoute, mais (a) il a atterri sur **node2
+  (10.0.0.110)** — pas pleinement configuré réseau — et (b) le port UDP n'est pas forwardé. Test
+  local = `10.0.0.110:25582` (LAN, pas l'IP publique). Externe = forward routeur **UDP → node2**.
+  ⇒ **Décision en attente** : **épingler les jeux à IP directe (Hytale/Satisfactory) sur node1**
+  (xe80dell) pour un routage/NAT simple et cohérent (sinon forward au cas par cas selon le node).
 
 **Reste à faire (actions de Simon — compte/ routeur) :**
-- [ ] Lancer **une fois** `./scripts/hytale-seed/download.sh` (compte Hytale licencié) → remplit `seeds/hytale/`.
-- [ ] **Connectivité UDP** : NAT routeur (+ pare-feu) pour la plage `25566:26565/udp`. ⚠️ Docker
-  publie déjà le port en contournant `ufw` → le maillon manquant est surtout le **forward routeur**,
-  pas « juste un reload ufw ».
-- [ ] Tester création serveur Hytale → doit démarrer direct sur l'auth serveur (sans étape download).
-- [ ] (Frontend/marketing) refléter le plancher **10 Go** Hytale (pages `/games/hytale`, `PLANS` si besoin).
+- [x] **Seed FAIT + VALIDÉ (2026-06-12)** : `seeds/hytale/{HytaleServer.jar 118M, Assets.zip 3.2G}`
+  présents, vus par l'API en `/seeds/hytale`. **Test bout en bout OK** : un container booté avec
+  `AUTO_DOWNLOAD=false` logue `Skipping download` puis `SERVER AUTHENTICATION REQUIRED` (Visit+Code)
+  → **aucun re-download, direct à l'auth serveur** (le client autorise). ⚠️ Le jar est extrait dans
+  `Server/` avant d'être déplacé à la racine, et `Assets.zip` est gros (3,2G) et long à extraire →
+  `download.sh` corrigé (cherche `Server/`, attend la fin via `game.zip` supprimé). Ne PAS copier un
+  `Assets.zip` en cours d'écriture (fichier partiel).
+- [x] **Test panel FAIT (2026-06-12)** : serveur Hytale créé via le panel → carte d'auth → autorisé
+  → `running` + `Universe ready!`. Auth + seed + démarrage OK.
+- [x] **Épinglage node fait + déployé (2026-06-12)** : jeux à IP directe (`!UsesMCRouter` → Hytale,
+  Satisfactory) **épinglés sur `cfg.PrimaryNode` (=node1, 10.0.0.2)** via `NodeWithCapacity` ;
+  Minecraft reste load-balancé (`BestNode`, mc-router route cross-node). But : NAT simple = **une
+  plage → une seule IP LAN**. (config `PRIMARY_NODE`, défaut node1.) Ports déjà sans chevauchement
+  (blocs globaux uniques). node1 = **10.0.0.2**, node2 = **10.0.0.110**.
+- [ ] **Règles routeur (à poser 1×)** : `UDP 25566-26565 → 10.0.0.2`, `TCP 25566-26565 → 10.0.0.2`
+  (Satisfactory), `TCP 25565 → 10.0.0.2` (Minecraft, sûrement déjà fait).
+- [ ] **Recréer le Hytale** (l'actuel `078abeef` est sur **node2**, créé avant l'épinglage → le
+  supprimer + recréer pour qu'il aille sur node1) **après avoir libéré node1** (le MC « Test »
+  extreme = 16 Go bouffe la RAM ; ~5 Go dispo seulement → un Hytale 10 Go n'y rentre pas).
+- [ ] **Tester le Discovery** : coller le token (« EDIT SERVER LISTING » sur hytale.com) dans la carte
+  « Listing public » → `discovery link <token>` via stdin → vérifier dans les logs. (Code prêt+déployé,
+  jamais exécuté en live.)
+- [x] (Frontend) plancher **10 Go** Hytale reflété (`lib/games.ts` : `minRamGb: 10`).
 
 **Étude de marché Hytale (réflexion consignée) :** `docs/hytale-analyse-marche.md` (verdict : payant
 non rentable — produit gratuit en self-host, marché saturé, plancher RAM non-surbookable ; mais
 demande réelle → **vitrine + events sponsorisés sur cloud à l'heure** ~2-10 €/event). Voir aussi
 backlog **#S** (events + sponsoring YouTubers), **#R** (mining `docs/mining-feasibility.md`),
 **#T** (anti-DDoS). Cibles créateurs : `PARTENAIRES.md` §1.bis. POC cloud : `scripts/event-server/`.
+
+**✅ Launch-readiness « premier utilisateur » (vérifié 2026-06-13)** : le funnel **Minecraft gratuit
+marche de bout en bout**. Home `/`→`/games/minecraft` (200, hero+CTA), inscription Discord OK,
+création serveur gratuit OK, **connexion externe PROUVÉE** (DNS `*.servers.vbt-prog.com`→IP publique ;
+port **25565 forwardé & atteint par un vrai client externe** ; routes mc-router OK : node1 par nom de
+conteneur, node2 par `10.0.0.110:port`), **support → courriel livré** (HTTP 200). ⚠️ Connexion MC =
+**sous-domaine obligatoire** (mc-router route par hostname, pas l'IP brute — le panel affiche déjà la
+bonne adresse ; idée : ajouter un *default-server* mc-router pour l'IP brute). Blog **étendu à 9
+articles SEO** (Hytale x3, Minecraft x4, Satisfactory, QC) → trafic organique. **Conclusion : le
+produit est livrable ; le maillon manquant = l'ACQUISITION** → kit de lancement prêt à coller
+(messages Reddit/Discord/FB) dans **`docs/lancement-premier-user.md`**. Actions Simon : poster ces
+messages + sécurité (révoquer token Cloudflare / régénérer bot Discord).
+
+## ✅ Session 2026-06-13/14 — Récap (tout déployé sur xe80dell)
+*Grosse session produit. Détails complets dans les entrées backlog correspondantes (#G→#Z).*
+
+**Hytale rendu jouable & validé** : booté en réel (OAuth Hytale **vivant**), parser auth corrigé
+(URL 1-clic), **seed** = jeu pré-téléchargé une fois (`scripts/hytale-seed/`, FAIT) → plus de
+re-download ; **plancher 10 Go / 4 cœurs** (2 cœurs laggait, corrigé) ; **belle carte d'auth** (le
+client autorise) + **console live** pendant l'auth ; **console stdin** + **listing Discovery** (token
+`discovery link`). Test réel via panel : créé → autorisé → `running` + « Universe ready! ». ⚠️ Le test
+a atterri sur **node2** ; connexion joueur = **NAT routeur** (action Simon).
+
+**Placement & ports** : jeux IP-directe (Hytale/Satisfactory) **épinglés node1** (`PrimaryNode`) → NAT
+simple (1 plage → 1 IP). Ports déjà en blocs sans chevauchement.
+
+**/admin enrichi (#M/#W)** : ⚙ **éditer RAM/CPU par serveur** (à chaud) ; **configs de base par jeu**
+(planchers éditables, Redis) ; **promo globale** (#Y, slider %/durée) ; **métriques business** (revenu,
+conversion, par jeu — **exclut le compte proprio `avabata`**) ; **sondage visiteurs** (#Z, agrégats).
+
+**Promo (#Y)** : rabais global %/durée piloté /admin → tous prix payants (affichage **SSR** + prix
+**barrés** + facturation PayPal). Stocké Redis. **Actuellement -75 %** (réglé par Simon, ~10 j).
+
+**Sondage (#Z)** : widget « 💬 Ton avis ? » (note, canal d'acquisition, usage, jeu, commentaire) →
+table `feedback` → agrégats /admin. Pour savoir **qui accroche / quoi améliorer**.
+
+**Site / acquisition** : compteur joueurs 0/0 corrigé (MC only) ; **header conscient de la session**
+(« Tableau de bord » si connecté) + **bouton déconnexion** ; nav blog/jeux depuis le dashboard (#X) ;
+**bloc plugins Minecraft** (upload/list/delete `.jar` + restart, #L v1) ; **blog → 9 articles** en
+**sections par jeu** ; **kit de lancement** (`docs/lancement-premier-user.md`) + analyse marché
+(`docs/hytale-analyse-marche.md`) + faisabilité mining (`docs/mining-feasibility.md`) + POC events cloud
+(`scripts/event-server/`).
+
+**Infra** : **`scripts/deploy.sh`** (déploiement reproductible api/monitor/frontend, encapsule env/mounts
+/réseaux — utiliser ça). Frontend **doit** être lancé avec `-e INTERNAL_API_URL=http://mcserver-api:8080`
+(SSR promo). CI GitHub Actions ajoutée (`.github/workflows/ci.yml`, #H).
+
+**⚠️ RESTE = actions de Simon (hors code)** : (1) **sécurité** — révoquer token Cloudflare + régénérer
+bot Discord ; (2) **NAT routeur** UDP+TCP `25566-26565 → 10.0.0.2` (connexion joueurs externes) ;
+(3) **poster le kit** de lancement (le maillon manquant pour le 1ᵉʳ user). Stockage promo/gamecfg = Redis
+(non persisté si flush Redis — re-régler via /admin si besoin).
 
 ## Backlog à traiter (demandé le 2026-06-11)
 
@@ -307,8 +443,12 @@ backlog **#S** (events + sponsoring YouTubers), **#R** (mining `docs/mining-feas
   - ⚠️ Limite connue : si l'auth échoue, l'entrypoint démarre le serveur **non authentifié** et le
     watcher peut le passer `running` (regex « listening ») alors que les joueurs ne peuvent pas se
     connecter. À durcir plus tard si besoin.
-- **#H — Ajouter un CI/CD** : pipeline de build/test/déploiement (GitHub Actions ?) pour les
+- 🟡 **#H — Ajouter un CI/CD** : pipeline de build/test/déploiement (GitHub Actions ?) pour les
   repos (au moins SGRentMcServer : backend Go + frontend Next.js).
+  - ✅ **CI ajoutée (2026-06-14)** : `.github/workflows/ci.yml` — job **backend** (`go build`/`vet`/`test`,
+    Go 1.25) + job **frontend** (`npm ci` + `tsc --noEmit` + lint non bloquant). Se déclenche sur push
+    `live`/`Claude/**` + PR. ⚠️ S'active **au prochain push** (Actions activé par défaut sur GitHub).
+  - [ ] **CD** (déploiement auto) non fait : le déploiement reste manuel sur xe80dell (cf. « Déploiement »).
 - **#I — Faire en sorte que Satisfactory fonctionne** : connexion joueur réelle (dépend du
   pare-feu UDP, cf. blocage connu ci-dessous) + validation bout en bout.
 - **#J — S'inspirer de la concurrence** : prendre référence sur
@@ -316,8 +456,15 @@ backlog **#S** (events + sponsoring YouTubers), **#R** (mining `docs/mining-feas
   améliorer offre, UX, pricing, pages jeux.
 - **#K — Publicité dans les différents éléments** : insérer de la pub / mises en avant dans
   les composants du site (bannières, cross-sell entre jeux, promos, etc.).
-- **#L — Mods et plugins pour Minecraft** : permettre l'ajout de mods/plugins (page `/mods`
-  actuellement placeholder « bientôt »).
+- 🟡 **#L — Mods et plugins pour Minecraft** : permettre l'ajout de mods/plugins.
+  - ✅ **Gestionnaire de plugins v1 (2026-06-14, déployé)** : section **« Plugins & mods (Paper) »**
+    sur la page serveur Minecraft (`dashboard/servers/[id]`) — **liste** les `.jar` du dossier
+    `/plugins`, **téléverse** un `.jar` (mkdir `/plugins` auto + `POST /files/upload?path=/plugins`),
+    **supprime**, et **bouton « Redémarrer pour appliquer »**. Réutilise l'API fichiers existante
+    (`/files`, `/files/upload`, DELETE `/files`, `/files/mkdir`). i18n FR/EN. Minecraft only.
+  - [ ] **Reste** : install **1-clic depuis Modrinth/SpigotMC** (chercher par nom → télécharger le jar
+    côté backend dans `/plugins`), gestion des **mods Fabric/Forge** (type de serveur ≠ Paper), page
+    `/mods` (placeholder « bientôt »), redémarrage auto après upload (optionnel).
 - **#M — `/admin` enrichi (multi-pages + métriques + mini-Jira)** : plus d'options dans le
   temps + **graphiques**, passer de **une page à plusieurs** (multi-vues navigables), pouvoir
   **supprimer / ajouter des serveurs pour des utilisateurs**, exposer **le plus de métriques
@@ -347,8 +494,15 @@ backlog **#S** (events + sponsoring YouTubers), **#R** (mining `docs/mining-feas
         sinon un plan payant à la création est ramené à `free` (garde dans `createServerForUser`).
   - [ ] **Mini-Jira (board tickets)** : colonnes à faire/en cours/fait, persisté en DB
         (nouvelle table `admin_tasks`), pour remplacer ce backlog .md à terme.
-  - [ ] **Métriques business avancées** : conversions, **coûts annonces** (Google Ads),
-        revenu réel (lié #F/#P), churn, etc.
+  - 🟡 **Métriques business** : ✅ **FAIT + déployé (2026-06-14)** — section « 💰 Métriques business »
+        dans /admin → Dashboard : **revenu encaissé** (total + ce mois, status `completed`), **MRR estimé**
+        (serveurs payants actifs × prix plan), **paiements en attente**, **users payants / total +
+        taux de conversion**, **serveurs payants/gratuits + par jeu**, **10 derniers paiements** (statut).
+        Backend `handleAdminMetrics` (`handlers_metrics.go`, agrège la table `payments` + `game_servers`),
+        endpoint `GET /api/v1/admin/metrics`, rafraîchi 30 s. **Exclut les comptes proprio/tests** (config
+        `METRICS_EXCLUDE_USERS`, défaut `avabata`) → les serveurs/paiements/users de `aVaBaTa` ne sont PAS
+        comptés (métriques = vrais clients seulement). Pour ajuster : env `METRICS_EXCLUDE_USERS=a,b,c`. [ ] **Reste** : **coûts annonces Google Ads**
+        (nécessite l'API Google Ads / saisie manuelle), **churn** (besoin d'un suivi abonnements). Lié #F/#P.
 - **#N — Visuels** : ajouter des **images de Minecraft** (et des autres jeux) sur le site.
 - **#O — Serveur communautaire / partenaires** : monter un serveur communautaire et/ou
   **trouver des partenaires** pour héberger des serveurs.
@@ -421,6 +575,101 @@ backlog **#S** (events + sponsoring YouTubers), **#R** (mining `docs/mining-feas
     (enterprise), à garder pour plus tard / gros clients.
   - **Court terme maison** : au minimum, ne JAMAIS exposer l'IP résidentielle pour des events
     publics ; passer par un VPS relais. Lié à #S (cloud) et #R (nodes distribués).
+- **#U — Étendre le catalogue de jeux** (demandé le 2026-06-12) : ajouter de nouveaux jeux au
+  registre (`internal/servers/games.go` + `frontend/lib/games.ts` + i18n/PLANS + page `/games/<jeu>`).
+  📄 **Specs techniques complètes (image Docker, ports `depuis base`, RAM plancher, volume, auth,
+  pièges, capacité xe80dell) : `docs/jeux-populaires-a-ajouter.md`.** Jeux demandés : **Palworld,
+  Terraria, The Forest, 7 Days to Die, Valheim, ARK: Survival Evolved, ARK: Survival Ascended,
+  Stardew Valley** (+ autres candidats : Rust, Factorio, Project Zomboid, V Rising, Enshrouded…).
+  **Séquençage recommandé** (par effort/valeur/empreinte) : **Valheim → Terraria → 7 Days to Die**
+  (natifs Linux, légers/moyens, forte demande) ; puis **lourds** (Palworld, ARK SE, ~1 serveur à la
+  fois comme Hytale) ; **Wine** (The Forest, ARK SA — effort élevé, ARK SA plutôt **cloud à l'heure**
+  cf. #S) ; **Stardew** en dernier (réseau Steam P2P ≠ modèle IP:port → cas particulier). ⚠️ Pas de
+  **port fixe** type `27015` en dur (collision multi-instances) → dériver tous les ports depuis `base`.
+- **#V — Redistribution dynamique des ressources des serveurs peu utilisés (overcommit/idle)** (demandé
+  2026-06-12) : **étudier** un système qui, quand un serveur est **quasi inactif** (0 joueur, peu de
+  CPU/RAM), **réduit/redistribue ses ressources de façon transparente** (le client ne le sait pas), et
+  les **restaure** dès qu'il redevient actif. Motivation concrète : un Hytale réserve **10 Go** mais
+  n'en utilise que **~1,3 Go au repos** (mesuré 2026-06-12) → énorme RAM gelée pour rien. Pistes :
+  - **Overcommit RAM contrôlé** : abaisser la limite cgroup (`docker update --memory`) d'un serveur
+    idle, la relever à l'activité ; surveiller pour éviter l'OOM (ne jamais descendre sous l'usage réel
+    + marge). Permettrait **plus de serveurs concurrents** sur xe80dell (la vraie contrainte = RAM).
+  - **CPU** : déjà partagé (NanoCPUs = plafond, pas réservation) — un serveur idle ne consomme pas ses
+    cœurs ; surtout pertinent pour la RAM.
+  - **Idle suspension/hibernation** : stopper/`pause` un serveur sans joueur depuis X min, le relancer
+    à la 1ʳᵉ tentative de connexion (nécessite un proxy qui réveille — type *lazymc* pour Minecraft, à
+    inventer pour l'UDP). Le plus gros gain mais le plus complexe (réveil UDP).
+  - **Détection de joueurs = signal central** (demandé 2026-06-12) : savoir si un serveur a des
+    joueurs connectés pilote **l'attribution réelle des ressources Docker**. Idée : un serveur **sans
+    joueur** ne se voit attribuer qu'un **minimum** (RAM/CPU réduits via `docker update`), et reçoit
+    sa **pleine allocation dès qu'un joueur se connecte** ⇒ **beaucoup plus de serveurs simultanés sur
+    la même machine** (on n'immobilise la RAM que pour les serveurs réellement joués). Sources de
+    détection : joueurs (RCON/MC ; logs/console Hytale ; query UDP par jeu), CPU/RAM réels (`docker
+    stats`, déjà dans le monitor #M), I/O réseau, connexions au port.
+  - ⚠️ **Risques** : OOM si on coupe trop, lag au « réveil », perception client (« mon serveur rame
+    après une pause »). **Commencer par une note de faisabilité** + un overcommit RAM **prudent** sur
+    les serveurs gratuits idle. Lié à #M (métriques), #W (planchers éditables) et au modèle économique
+    (densité = rentabilité).
+- **#W — Édition des ressources (CPU/RAM) depuis `/admin`** (demandé 2026-06-12) :
+  - ✅ **FAIT + déployé (2026-06-12) — override par serveur** : bouton **⚙** dans la vue Serveurs de
+    `/admin` → édite RAM (Go) + CPU (cœurs) d'un serveur précis, **appliqué à chaud** (`docker update`)
+    + persisté en DB. Chaîne : monitor `POST /api/servers/{id}/resources` → API `POST
+    /api/v1/admin/servers/{id}/resources` (token admin) → orchestrateur `UpdateResources` (existait
+    déjà) → cgroup du conteneur (marche cross-node, testé sur node2 : 4→3→4 cœurs OK) + DB. Bornes
+    512 Mo–128 Go / 0.5–64 cœurs. Repo : `GetByIDAny` + `UpdateResources`.
+  - ✅ **Planchers par JEU éditables depuis /admin (FAIT + déployé 2026-06-14)** : section
+    « ⚙️ Configs de base des jeux » dans /admin → Dashboard → édite **RAM (Go) + CPU** par jeu
+    (Hytale/Satisfactory/Minecraft), bouton Enregistrer. **Override stocké dans Redis** (`gamecfg:<id>`,
+    `internal/server/gamecfg.go`) ; `createServerForUser` + l'upgrade utilisent `effectiveFloor`
+    (override sinon valeurs `games.go`). Endpoints `GET /api/v1/admin/games`, `POST
+    /api/v1/admin/games/{id}/config` (bornes 256 Mo–128 Go / 0.5–64 cœurs). ⚠️ S'applique aux
+    **nouveaux** serveurs du jeu (les existants : bouton ⚙ par serveur). Chaîne testée (write/validation).
+- ✅ **#X — FAIT (2026-06-14, déployé)** : header du dashboard enrichi de liens **Jeux** (`/games`),
+  **Blog** (`/blog`), **Mods** (`/mods`) via `<Link>` (nav client, cookie de session conservé → retour
+  au dashboard toujours connecté). Logo → `/dashboard`. Aussi : métadonnée blog passée en multi-jeux +
+  **blog en sections par jeu** (Minecraft/Hytale/Satisfactory/Guides).
+  - ✅ **Header public conscient de la session (2026-06-14)** : avant, les pages publiques affichaient
+    toujours « Se connecter » même connecté → l'utilisateur *croyait* être déconnecté. Nouveau composant
+    **`AuthButton`** (`site-chrome.tsx`) qui vérifie **`GET /api/v1/user/me`** (401/200) → affiche
+    **« Tableau de bord »** (→`/dashboard`) si connecté, **« Se connecter »** sinon. Branché dans
+    `SiteNav` (landing, `/games/*`, `/mods`) **et** les nav du **blog** (index + `[slug]`). La session
+    (cookie JWT) persistait déjà ; c'était l'UI qui ne la reflétait pas.
+- **#X — Navigation blog/pages publiques depuis le dashboard connecté** (demandé 2026-06-13) : quand
+  l'utilisateur est **connecté** et sur son tableau de bord (liste de ses serveurs), il doit pouvoir
+  **accéder au blog (et aux autres pages publiques : jeux, plans…) en restant connecté** — sans
+  perdre sa session ni devoir se reconnecter. À faire : ajouter des liens (header/nav du dashboard)
+  vers `/blog`, `/games/*`, etc., et s'assurer que la session JWT (cookie) persiste sur tout le site
+  (le blog est public donc déjà accessible ; le point clé = la nav y mène depuis l'espace connecté et
+  le retour au dashboard reste connecté). Cohérence : header commun connecté/déconnecté.
+- ✅ **#Y — Promo globale (rabais % + durée) pilotée depuis /admin** (FAIT + déployé 2026-06-14) :
+  rabais appliqué à **tous les prix payants** (affichage **et** facturation PayPal). **Stocké dans
+  Redis** (`promo:global`, pas de migration). **Backend** (`internal/server/promo.go`) : `GET
+  /api/v1/promo` (public, rabais actif), `GET|POST /api/v1/admin/promo` (token admin, `{percent 0-90,
+  days}` ; days=0 = permanent, sinon expire dans N jours) ; checkout PayPal applique `applyPromoCents`.
+  **Frontend** : `LanguageProvider` fetch `/api/v1/promo` → `setPromoFactor` → `priceFor` multiplie
+  tous les prix (donc **toutes les pages** se mettent à jour sans édition) + **bannière promo**
+  (`PromoBanner` dans `site-chrome`, `t.promoBanner`). **Admin** : section « Promotion globale »
+  (slider 0-90 % + durée jours + bouton -50% + Appliquer). Pour changer/désactiver : /admin → Dashboard
+  → Promotion globale (0 % = off).
+  - ✅ **SSR (2026-06-14)** : le rabais s'affiche **dès le HTML serveur** (prix réduits + bannière dans
+    le HTML brut → bon pour le SEO, zéro flash). `layout.tsx` (async) fetch `/api/v1/promo` côté serveur
+    (`INTERNAL_API_URL`, **timeout 2 s** sinon le build hang 60 s/page, ISR `revalidate:30`) → passé en
+    `initialPromo` au `LanguageProvider` (init `useState`/`setPromoFactor`) ; re-fetch client pour rester
+    frais. ⚠️ Pages statiques : juste après un build, le 1ᵉʳ rendu peut être promo=0 jusqu'à la 1ʳᵉ
+    revalidation ISR — le client corrige immédiatement. Vérifié : prix CAD à -75 % dans le HTML brut.
+  - ✅ **Prix barrés (2026-06-14)** : `priceFor` renvoie aussi `originalMonthly`/`originalTotal` +
+    `promoActive` → quand une promo est active, le **prix régulier s'affiche barré** (`line-through`) à
+    côté du prix réduit. Appliqué aux **3 pages jeux** (`/games/*`) + **sélecteur de plan** du dashboard
+    (`servers/[id]`). Rendu dès le SSR (barré dans le HTML brut). i18n inchangé.
+- ✅ **#Z — Sondage / feedback visiteurs (FAIT + déployé 2026-06-14)** : comprendre **qui accroche
+  et quoi améliorer**. **Widget flottant « 💬 Ton avis ? »** (`FeedbackWidget` dans `site-chrome`,
+  rendu global via `layout.tsx`) → modale : note (1-5★), **canal d'acquisition** (Reddit/Discord/ami/
+  Google/autre), **cas d'usage** (entre amis/communauté/test/autre), **jeu d'intérêt**, commentaire
+  libre, email optionnel. Stocké en DB table **`feedback`** (migration `004_feedback.sql`, appliquée
+  live). Endpoints : `POST /api/v1/feedback` (public), `GET /api/v1/admin/feedback` (admin, agrégats
+  par canal/usage/jeu + note moyenne + 30 derniers commentaires). **/admin → Dashboard → « 💬 Sondage
+  visiteurs »** (rafraîchi 30 s). i18n FR/EN (`t.survey`). Testé E2E (POST→agrégats→affichage).
+  But : mesurer le **canal qui convertit** (lié #F Google Ads) et prioriser les améliorations.
 
 ## ⚠️ Blocage connu : connectivité des serveurs UDP (Satisfactory/Hytale)
 

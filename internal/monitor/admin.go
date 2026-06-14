@@ -54,3 +54,31 @@ func (c *AdminClient) SetUnlimited(ctx context.Context, userID string, body []by
 func (c *AdminClient) CreateServer(ctx context.Context, body []byte) (int, []byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/admin/servers", body)
 }
+
+func (c *AdminClient) UpdateResources(ctx context.Context, serverID string, body []byte) (int, []byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/admin/servers/"+serverID+"/resources", body)
+}
+
+func (c *AdminClient) GetPromo(ctx context.Context) (int, []byte, error) {
+	return c.do(ctx, http.MethodGet, "/api/v1/admin/promo", nil)
+}
+
+func (c *AdminClient) SetPromo(ctx context.Context, body []byte) (int, []byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/admin/promo", body)
+}
+
+func (c *AdminClient) ListGames(ctx context.Context) (int, []byte, error) {
+	return c.do(ctx, http.MethodGet, "/api/v1/admin/games", nil)
+}
+
+func (c *AdminClient) SetGameConfig(ctx context.Context, gameID string, body []byte) (int, []byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/admin/games/"+gameID+"/config", body)
+}
+
+func (c *AdminClient) Metrics(ctx context.Context) (int, []byte, error) {
+	return c.do(ctx, http.MethodGet, "/api/v1/admin/metrics", nil)
+}
+
+func (c *AdminClient) Feedback(ctx context.Context) (int, []byte, error) {
+	return c.do(ctx, http.MethodGet, "/api/v1/admin/feedback", nil)
+}

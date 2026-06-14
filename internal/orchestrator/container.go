@@ -39,6 +39,7 @@ type ServerSpec struct {
 	RouterPort    int           // port interne ciblé par mc-router (ex: 25565)
 	Network       string        // réseau Docker partagé avec mc-router (ex: mc-net)
 	EnvVars       []string
+	OpenStdin     bool          // garder stdin ouvert (console interactive, ex. Hytale)
 }
 
 func (n *Node) CreateServer(ctx context.Context, spec ServerSpec) (string, error) {
@@ -73,6 +74,10 @@ func (n *Node) CreateServer(ctx context.Context, spec ServerSpec) (string, error
 		Labels:       labels,
 		Env:          spec.EnvVars,
 		ExposedPorts: exposed,
+		// Console interactive (Hytale) : on garde stdin ouvert pour pouvoir envoyer
+		// des commandes au serveur (ex. `discovery link <token>`) via attach.
+		OpenStdin: spec.OpenStdin,
+		StdinOnce: false,
 	}
 
 	// Volume nommé persistant pour les données du serveur (monde, configs, mods).
@@ -228,6 +233,26 @@ func (n *Node) Exec(ctx context.Context, containerID string, cmd []string) (stri
 		out = errBuf.String()
 	}
 	return out, nil
+}
+
+// SendStdin écrit une commande sur le STDIN du serveur (console interactive, ex.
+// Hytale → `discovery link <token>`). Le container doit avoir été créé avec OpenStdin.
+// La sortie de la commande apparaît dans les LOGS du serveur (pas de retour direct).
+// On n'envoie PAS d'EOF (pas de CloseWrite) : le stdin reste ouvert pour les commandes
+// suivantes (StdinOnce=false).
+func (n *Node) SendStdin(ctx context.Context, containerID, command string) error {
+	resp, err := n.cli.ContainerAttach(ctx, containerID, container.AttachOptions{
+		Stream: true,
+		Stdin:  true,
+	})
+	if err != nil {
+		return fmt.Errorf("attach stdin: %w", err)
+	}
+	defer resp.Close()
+	if _, err := resp.Conn.Write([]byte(command + "\n")); err != nil {
+		return fmt.Errorf("write stdin: %w", err)
+	}
+	return nil
 }
 
 // Logs retourne les dernières lignes de logs du container (console lecture seule).

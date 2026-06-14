@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/aVaBaTa/SGRentMcServer/internal/servers"
 )
 
 // playersListRe capture la sortie de `rcon-cli list` :
@@ -109,6 +111,22 @@ func (s *Server) handleServerCommand(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server not running", http.StatusConflict)
 		return
 	}
+	// On bloque les retours à la ligne (1 commande = 1 ligne ; pas d'injection multi-commande).
+	if strings.ContainsAny(cmd, "\r\n") {
+		http.Error(w, "invalid command", http.StatusBadRequest)
+		return
+	}
+	// Jeux à console stdin (Hytale) : on écrit directement sur le STDIN du serveur.
+	// La sortie apparaît dans les logs (pas de retour direct). Les jeux à RCON
+	// (Minecraft) passent par rcon-cli et renvoient la sortie.
+	if def, derr := servers.GetGame(gs.Game); derr == nil && def.ConsoleStdin {
+		if err := node.SendStdin(r.Context(), gs.ContainerID, cmd); err != nil {
+			http.Error(w, "command failed", http.StatusServiceUnavailable)
+			return
+		}
+		respond(w, http.StatusOK, map[string]string{"output": "", "sent": "true"})
+		return
+	}
 	// On retire un éventuel '/' initial (les commandes RCON n'en prennent pas).
 	cmd = strings.TrimPrefix(cmd, "/")
 	out, err := node.Exec(r.Context(), gs.ContainerID, []string{"rcon-cli", cmd})
@@ -117,4 +135,49 @@ func (s *Server) handleServerCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, http.StatusOK, map[string]string{"output": out})
+}
+
+// discoveryTokenRe : caractères autorisés dans un token de découverte Hytale
+// (opaque : base64url + points + '='). Empêche toute injection dans la ligne console.
+var discoveryTokenRe = regexp.MustCompile(`^[A-Za-z0-9._=\-]{8,512}$`)
+
+// handleServerDiscovery : POST /servers/{id}/discovery {token} → lie le serveur au
+// listing public Hytale via `discovery link <token>` (console stdin). Hytale only.
+func (s *Server) handleServerDiscovery(w http.ResponseWriter, r *http.Request) {
+	gs, node, err := s.resolveServer(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	def, derr := servers.GetGame(gs.Game)
+	if derr != nil || !def.ConsoleStdin {
+		http.Error(w, "discovery not supported for this game", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Token  string `json:"token"`
+		Unlink bool   `json:"unlink"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if gs.ContainerID == "" || gs.Status != "running" {
+		http.Error(w, "server not running", http.StatusConflict)
+		return
+	}
+	cmd := "discovery unlink"
+	if !body.Unlink {
+		token := strings.TrimSpace(body.Token)
+		if !discoveryTokenRe.MatchString(token) {
+			http.Error(w, "invalid token", http.StatusBadRequest)
+			return
+		}
+		cmd = "discovery link " + token
+	}
+	if err := node.SendStdin(r.Context(), gs.ContainerID, cmd); err != nil {
+		http.Error(w, "command failed", http.StatusServiceUnavailable)
+		return
+	}
+	respond(w, http.StatusOK, map[string]string{"status": "sent"})
 }

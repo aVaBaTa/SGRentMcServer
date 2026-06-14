@@ -108,6 +108,32 @@ func (r *Repo) GetByID(ctx context.Context, id, userID string) (*GameServer, err
 	return s, nil
 }
 
+// GetByIDAny récupère un serveur par id SANS contrôle de propriétaire (usage admin).
+func (r *Repo) GetByIDAny(ctx context.Context, id string) (*GameServer, error) {
+	const q = `
+		SELECT id, user_id, name, subdomain, game, plan, version, node, container_id, status, ram_mb, cpu_cores, port, created_at
+		FROM game_servers WHERE id = $1
+	`
+	s := &GameServer{}
+	err := r.db.QueryRow(ctx, q, id).Scan(
+		&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version,
+		&s.Node, &s.ContainerID, &s.Status, &s.RAMMb, &s.CPUCores, &s.Port, &s.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("server not found: %w", err)
+	}
+	return s, nil
+}
+
+// UpdateResources met à jour UNIQUEMENT la RAM/CPU (override admin), sans toucher au plan.
+func (r *Repo) UpdateResources(ctx context.Context, id string, ramMB int64, cpuCores float64) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE game_servers SET ram_mb=$1, cpu_cores=$2, updated_at=NOW() WHERE id=$3`,
+		ramMB, cpuCores, id,
+	)
+	return err
+}
+
 func (r *Repo) UpdateStatus(ctx context.Context, id, status string) error {
 	_, err := r.db.Exec(ctx,
 		`UPDATE game_servers SET status=$1, updated_at=NOW() WHERE id=$2`,
