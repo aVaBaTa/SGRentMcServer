@@ -234,6 +234,20 @@ const fr = {
     ctaStart: "Démarrer gratuitement",
     back: "← Tous les jeux",
   },
+  valheim: {
+    badge: "Disponible",
+    title1: "Hébergement",
+    title2: "Valheim",
+    subtitle: "Monte ton serveur Valheim dédié en quelques secondes : explore, construis et survis en coopération, sauvegardes automatiques et gestion complète depuis le panel.",
+    bullets: [
+      "Serveur dédié 4 Go — jusqu'à 10 joueurs",
+      "Sauvegardes automatiques et accès aux fichiers",
+      "Déploiement instantané, géré depuis le panel",
+      "Connexion directe par IP — invite tes amis",
+    ],
+    ctaStart: "Démarrer maintenant",
+    back: "← Tous les jeux",
+  },
   foot: {
     discordCta: "Rejoins notre serveur Discord pour des nouveautés, mises à jour et giveaways !",
     joinDiscord: "Rejoindre Discord",
@@ -647,6 +661,20 @@ const en: Dict = {
       "Direct IP connect — invite your friends",
     ],
     ctaStart: "Start for free",
+    back: "← All games",
+  },
+  valheim: {
+    badge: "Available",
+    title1: "Valheim",
+    title2: "Hosting",
+    subtitle: "Spin up a dedicated Valheim server in seconds: explore, build and survive in co-op, automatic saves and full management from the panel.",
+    bullets: [
+      "Dedicated 4 GB server — up to 10 players",
+      "Automatic saves and file access",
+      "Instant deployment, managed from the panel",
+      "Direct IP connect — invite your friends",
+    ],
+    ctaStart: "Start now",
     back: "← All games",
   },
   foot: {

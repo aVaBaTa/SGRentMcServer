@@ -15,11 +15,11 @@ export const GAMES: Game[] = [
   { id: "minecraft", name: "Minecraft", href: "/games/minecraft", status: "live", accent: "from-green-500 to-emerald-600" },
   { id: "hytale", name: "Hytale", href: "/games/hytale", status: "live", accent: "from-blue-500 to-indigo-600", minRamGb: 10, freeAtFloor: true },
   { id: "satisfactory", name: "Satisfactory", href: "/games/satisfactory", status: "live", accent: "from-orange-500 to-amber-600", minRamGb: 4, freeAtFloor: true },
+  { id: "valheim", name: "Valheim", href: "/games/valheim", status: "live", accent: "from-sky-500 to-cyan-600", minRamGb: 4 },
 
   // --- Bientôt (jeux populaires avec serveur dédié — href "#" tant qu'il n'y a pas de page) ---
   { id: "rust", name: "Rust", href: "/games/rust", status: "soon", accent: "from-red-500 to-orange-600" },
   { id: "ark", name: "ARK: Survival", href: "/games/ark", status: "soon", accent: "from-fuchsia-500 to-purple-600" },
-  { id: "valheim", name: "Valheim", href: "#", status: "soon", accent: "from-sky-500 to-cyan-600" },
   { id: "palworld", name: "Palworld", href: "#", status: "soon", accent: "from-yellow-400 to-amber-500" },
   { id: "terraria", name: "Terraria", href: "#", status: "soon", accent: "from-emerald-500 to-teal-600" },
   { id: "7dtd", name: "7 Days to Die", href: "#", status: "soon", accent: "from-amber-700 to-red-800" },
@@ -58,6 +58,7 @@ export const GAME_THEME: Record<string, GameTheme> = {
   minecraft:    { text: "text-green-400", btn: "bg-green-500 hover:bg-green-400 shadow-green-500/30", border: "border-green-500/30", glow: "bg-green-500/15" },
   hytale:       { text: "text-blue-400",  btn: "bg-blue-500 hover:bg-blue-400 shadow-blue-500/30",   border: "border-blue-500/30",  glow: "bg-blue-500/15" },
   satisfactory: { text: "text-amber-400", btn: "bg-amber-500 hover:bg-amber-400 shadow-amber-500/30", border: "border-amber-500/30", glow: "bg-amber-500/15" },
+  valheim:      { text: "text-cyan-400",  btn: "bg-cyan-500 hover:bg-cyan-400 shadow-cyan-500/30",   border: "border-cyan-500/30",  glow: "bg-cyan-500/15" },
   rust:         { text: "text-orange-400", btn: "bg-orange-500 hover:bg-orange-400 shadow-orange-500/30", border: "border-orange-500/30", glow: "bg-orange-500/15" },
   ark:          { text: "text-fuchsia-400", btn: "bg-fuchsia-500 hover:bg-fuchsia-400 shadow-fuchsia-500/30", border: "border-fuchsia-500/30", glow: "bg-fuchsia-500/15" },
 };

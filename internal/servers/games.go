@@ -204,6 +204,24 @@ var games = map[string]GameDef{
 		},
 		Env: hytaleEnv,
 	},
+	"valheim": {
+		ID:           "valheim",
+		Image:        "lloesche/valheim-server:latest",
+		DataPath:     "/config",
+		UsesMCRouter: false, // UDP, pas de routing par hostname → IP:port direct
+		MinRAMMb:     4096,  // plancher jouable (4 Go min, 8 Go confortable)
+		MinCPUCores:  2.0,
+		Ports: func(base int) []PortMapping {
+			// Valheim écoute en UDP sur SERVER_PORT et SERVER_PORT+1 (deux ports
+			// consécutifs, dans le bloc du serveur). Identité hôte == interne car le
+			// jeu annonce son port via Steam (pas de remapping possible).
+			return []PortMapping{
+				{HostPort: base, Internal: base, Proto: "udp"},         // jeu
+				{HostPort: base + 1, Internal: base + 1, Proto: "udp"}, // +1 requis par Valheim
+			}
+		},
+		Env: valheimEnv,
+	},
 }
 
 // GetGame retourne la définition d'un jeu, ou une erreur si l'id est inconnu.
@@ -317,4 +335,19 @@ func hytaleEnv(plan Plan, _, _, _ string, base int) []string {
 		env = append(env, fmt.Sprintf("MAX_PLAYERS=%d", plan.MaxSlots))
 	}
 	return env
+}
+
+// valheimEnv : config pour l'image lloesche/valheim-server. Le port de jeu est
+// aligné sur le port de base alloué (Valheim écoute base et base+1 en UDP).
+// SERVER_PASS : Valheim exige un mot de passe (≥5 car., différent du nom) — on
+// pose un défaut tant que le panel ne le collecte pas à la création (à raffiner).
+// Valheim plafonne nativement à 10 joueurs (pas de MAX_PLAYERS configurable).
+func valheimEnv(_ Plan, _, _, _ string, base int) []string {
+	return []string{
+		"SERVER_NAME=Playrena Valheim",
+		fmt.Sprintf("SERVER_PORT=%d", base),
+		"WORLD_NAME=Playrena",
+		"SERVER_PASS=playrena",
+		"SERVER_PUBLIC=1",
+	}
 }

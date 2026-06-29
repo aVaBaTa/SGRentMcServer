@@ -26,7 +26,11 @@ const jsonLd = {
 export default function HytaleHosting() {
   const { t, lang } = useI18n();
   const [period, setPeriod] = useState<Period>("monthly");
-  const floor = getGame("hytale")?.minRamGb ?? 0;
+  const game = getGame("hytale");
+  const floor = game?.minRamGb ?? 0;
+  const freeAtFloor = game?.freeAtFloor ?? false;
+  // Jeu offert (freeAtFloor) → seul le plan gratuit, au plancher (payants masqués).
+  const visiblePlans = freeAtFloor ? PLANS.filter((p) => p.id === "free") : PLANS;
 
   return (
     <main className="flex flex-col min-h-screen">
@@ -118,8 +122,8 @@ export default function HytaleHosting() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {PLANS.map((plan) => {
+        <div className={freeAtFloor ? "max-w-sm mx-auto" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"}>
+          {visiblePlans.map((plan) => {
             const { monthly, total, discount, originalMonthly, promoActive } = priceFor(plan, lang, period);
             const isFree = plan.id === "free";
             return (

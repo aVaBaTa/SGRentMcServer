@@ -96,9 +96,19 @@ décide quand pusher. Convention de branche imposée : `Claude/feature/<desc>` (
 | **Minecraft** | ✅ live | `itzg/minecraft-server` | 25565/tcp (mc-router par hostname) | `/data` | versions PAPER, RCON (console/joueurs), gratuit dès 1 Go |
 | **Satisfactory** | ✅ live | `wolveix/satisfactory-server` | base/udp+tcp (jeu) + base+1/tcp (messaging), identité, **dans le bloc** | `/config` | plancher **4 Go gratuit** (promo), IP:port direct, pas de RCON |
 | **Hytale** | ✅ live | `ghcr.io/terkea/hytale-server` | base/udp (QUIC, `SERVER_PORT`) | `/data` | plancher **10 Go** (réaliste, assumé non rentable), **fichiers pré-téléchargés** (seed → pas de re-download) → le **client** ne fait que l'**auth serveur** (device-code, panel affiche URL+code), IP:port direct |
+| **Valheim** | ✅ live | `lloesche/valheim-server` | base/udp (jeu) + base+1/udp, identité, **dans le bloc** | `/config` | plancher **4 Go** (≤10 joueurs, cap natif), IP:port direct, `SERVER_PASS` défaut `playrena` (à rendre configurable), produit **payant** (grille complète) |
 | Rust, ARK | ⏳ soon | — | — | — | marqués « Bientôt » dans `games.ts` |
 
-**Catalogue à étendre (backlog #U)** : Palworld, Terraria, The Forest, 7 Days to Die, Valheim,
+**✅ Session 2026-06-29 — Valheim ajouté + promo /games + redeploy** : (1) **Valheim live** (1er jeu
+du backlog #U) — `GameDef` `valheim` (`internal/servers/games.go`, `valheimEnv`, ports `base`+`base+1`
+udp dans le bloc), `games.ts` passé `live` + page `/games/valheim` + bloc i18n `valheim` + thème cyan.
+(2) **#3 masquage promo** : `/games/satisfactory` & `/games/hytale` n'affichent plus que le plan gratuit
+au plancher (`freeAtFloor` → `visiblePlans`), payants masqués. (3) **Redéployé** : `mcserver-api`
+(active l'allocateur de ports **par blocs** + handlers mods/pageviews commités + Valheim) et
+`mcserver-frontend`. Migrations 005/006/007 **déjà appliquées**. Validé en public (Valheim 200, masquage
+OK, Hytale 10 Go).
+
+**Catalogue à étendre (backlog #U)** : ~~Valheim~~ (fait), Palworld, Terraria, The Forest, 7 Days to Die,
 ARK: Survival Evolved, ARK: Survival Ascended, Stardew Valley + autres candidats populaires.
 📄 **Specs techniques (image Docker, ports, RAM, pièges) : `docs/jeux-populaires-a-ajouter.md`.**
 
