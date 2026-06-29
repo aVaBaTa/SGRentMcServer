@@ -6,9 +6,10 @@ import { useI18n, type Lang } from "@/lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-// AuthButton : affiche « Tableau de bord » si l'utilisateur est connecté (cookie de
-// session valide, vérifié via /api/v1/me), sinon « Se connecter » (OAuth Discord).
-// → l'utilisateur reste connecté en naviguant et a toujours un lien vers son espace.
+// AuthButton : affiche « Tableau de bord » + « Déconnexion » si l'utilisateur est connecté
+// (cookie de session valide, vérifié via /api/v1/me), sinon « Se connecter » (OAuth Discord).
+// → l'utilisateur reste connecté en naviguant, a toujours un lien vers son espace et peut
+//   se déconnecter depuis n'importe quelle page publique (logout → POST /auth/logout → accueil).
 export function AuthButton() {
   const { t } = useI18n();
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -17,11 +18,20 @@ export function AuthButton() {
       .then((r) => setAuthed(r.ok))
       .catch(() => setAuthed(false));
   }, []);
+  async function logout() {
+    try { await fetch(`${API}/auth/logout`, { method: "POST", credentials: "include" }); } catch { /* ignore */ }
+    window.location.href = "/";
+  }
   if (authed === null) return <span className="inline-block w-28 h-9" aria-hidden />;
   return authed ? (
-    <a href="/dashboard" className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg transition-colors font-medium">
-      {t.nav.dashboard}
-    </a>
+    <div className="flex items-center gap-2 sm:gap-3">
+      <a href="/dashboard" className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg transition-colors font-medium">
+        {t.nav.dashboard}
+      </a>
+      <button onClick={logout} className="text-sm text-zinc-400 hover:text-red-400 transition-colors font-medium">
+        {t.nav.logout}
+      </button>
+    </div>
   ) : (
     <a href={`${API}/auth/discord`} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors font-medium">
       {t.nav.login}

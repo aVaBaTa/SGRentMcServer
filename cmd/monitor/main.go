@@ -312,6 +312,14 @@ func main() {
 		relay(w, st, out, err)
 	})
 
+	mux.HandleFunc("GET /api/pageviews", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.PageViews(ctx)
+		relay(w, st, out, err)
+	})
+
 	mux.Handle("GET /", http.FileServer(http.FS(staticFS)))
 	// Sert l'index à la racine
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {

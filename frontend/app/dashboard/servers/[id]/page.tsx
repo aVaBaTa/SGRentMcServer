@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight, KeyRound, Copy, Check, Loader2, ExternalLink, AlertTriangle, Globe } from "lucide-react";
+import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight, KeyRound, Copy, Check, Loader2, ExternalLink, AlertTriangle, Globe, Search, Package } from "lucide-react";
 import { useI18n, PLANS as BASE_PLANS, priceFor, fmtMoney } from "@/lib/i18n";
 import { getGame } from "@/lib/games";
 import { LanguageSwitcher } from "@/components/site-chrome";
@@ -17,10 +17,33 @@ interface GameServer {
   game: string;
   plan: string;
   version: string;
+  loader?: string; // minecraft : paper | fabric | forge
+  modpack?: string; // "ftb:..."/"modrinth:..." ou "" = aucun
   status: string;
   ram_mb: number;
   cpu_cores: number;
   port: number;
+}
+
+interface ModHit {
+  project_id: string;
+  slug: string;
+  title: string;
+  description: string;
+  downloads: number;
+  icon_url: string;
+  author: string;
+}
+
+interface ModpackHit {
+  source: string; // "modrinth" | "ftb"
+  id: string;
+  name: string;
+  summary: string;
+  icon: string;
+  downloads: number;
+  version_id: string;
+  version_name: string;
 }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -40,6 +63,19 @@ export default function ServerPage() {
   const { t, lang } = useI18n();
   const [server, setServer] = useState<GameServer | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"overview" | "console" | "files" | "mods" | "settings">("overview");
+  // Navigateur de mods/plugins (Modrinth)
+  const [modQuery, setModQuery] = useState("");
+  const [modResults, setModResults] = useState<ModHit[] | null>(null);
+  const [modSearching, setModSearching] = useState(false);
+  const [modInstalling, setModInstalling] = useState("");
+  const [modMsg, setModMsg] = useState("");
+  // Modpacks (FTB + Modrinth)
+  const [packQuery, setPackQuery] = useState("");
+  const [packResults, setPackResults] = useState<ModpackHit[] | null>(null);
+  const [packSearching, setPackSearching] = useState(false);
+  const [packInstalling, setPackInstalling] = useState("");
+  const [packMsg, setPackMsg] = useState("");
   const [selectedPlan, setSelectedPlan] = useState("");
   const [upgrading, setUpgrading] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState("");
@@ -156,6 +192,7 @@ export default function ServerPage() {
   // Authentification interactive (Hytale) : poll de l'URL+code OAuth + logs live.
   const [authInfo, setAuthInfo] = useState<{ pending: boolean; step?: number; url?: string; code?: string; raw?: string[]; booting?: boolean; gone?: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [instrCopied, setInstrCopied] = useState(false);
   const authRequired = server?.status === "auth_required";
 
   const copyCode = async (code: string) => {
@@ -223,6 +260,12 @@ export default function ServerPage() {
     if (running && server?.game === "minecraft") loadPlugins();
     else setPlugins([]);
   }, [id, running, server?.game]);
+
+  // À l'ouverture de l'onglet Mods : pré-charge les modpacks populaires (FTB + Modrinth).
+  useEffect(() => {
+    if (tab === "mods" && server?.game === "minecraft" && packResults === null) searchModpacks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, server?.game]);
 
   async function doPlayerAction(action: string, player: string) {
     const p = player.trim();
@@ -343,10 +386,14 @@ export default function ServerPage() {
     window.open(`${API}/api/v1/servers/${id}/files/download?path=${encodeURIComponent(p)}`, "_blank");
   }
 
-  // ----- Plugins Minecraft (dossier /plugins) -----
+  // ----- Plugins/mods Minecraft -----
+  // Dossier selon le loader : Fabric/Forge = mods moddés → /mods, Paper = plugins → /plugins.
+  function modDir() {
+    return server?.loader === "fabric" || server?.loader === "forge" || server?.modpack ? "/mods" : "/plugins";
+  }
   async function loadPlugins() {
     try {
-      const res = await fetch(`${API}/api/v1/servers/${id}/files?path=${encodeURIComponent("/plugins")}`, { credentials: "include" });
+      const res = await fetch(`${API}/api/v1/servers/${id}/files?path=${encodeURIComponent(modDir())}`, { credentials: "include" });
       if (!res.ok) { setPlugins([]); return; } // dossier pas encore créé
       const list: FileEntry[] = (await res.json()) ?? [];
       setPlugins(list.filter((e) => !e.is_dir && e.name.toLowerCase().endsWith(".jar")));
@@ -357,14 +404,15 @@ export default function ServerPage() {
     if (!f.name.toLowerCase().endsWith(".jar")) { alert(t.srv.pluginsOnlyJar); return; }
     setPluginUploading(true);
     try {
-      // S'assure que /plugins existe (ignore l'erreur s'il existe déjà).
+      const dir = modDir();
+      // S'assure que le dossier existe (ignore l'erreur s'il existe déjà).
       await fetch(`${API}/api/v1/servers/${id}/files/mkdir`, {
         method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: "/plugins" }),
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: dir }),
       }).catch(() => {});
       const fd = new FormData();
       fd.append("file", f);
-      const res = await fetch(`${API}/api/v1/servers/${id}/files/upload?path=${encodeURIComponent("/plugins")}`, {
+      const res = await fetch(`${API}/api/v1/servers/${id}/files/upload?path=${encodeURIComponent(dir)}`, {
         method: "POST", credentials: "include", body: fd,
       });
       if (res.ok) await loadPlugins();
@@ -378,9 +426,83 @@ export default function ServerPage() {
     if (!confirm(t.srv.pluginsDelete + "\n" + name)) return;
     const res = await fetch(`${API}/api/v1/servers/${id}/files`, {
       method: "DELETE", credentials: "include",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: "/plugins/" + name }),
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: modDir() + "/" + name }),
     });
     if (res.ok) await loadPlugins();
+  }
+
+  // ----- Navigateur de mods/plugins (Modrinth) -----
+  async function searchMods(e?: React.FormEvent) {
+    e?.preventDefault();
+    setModSearching(true); setModMsg("");
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/mods/search?q=${encodeURIComponent(modQuery)}`, { credentials: "include" });
+      if (res.ok) { const d = await res.json(); setModResults(d.hits ?? []); }
+      else { setModResults([]); setModMsg(t.srv.modsSearchErr); }
+    } catch { setModResults([]); setModMsg(t.srv.modsSearchErr); } finally { setModSearching(false); }
+  }
+  async function installMod(projectId: string) {
+    setModInstalling(projectId); setModMsg("");
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/mods/install`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: projectId }),
+      });
+      if (res.ok) { const d = await res.json(); setModMsg(t.srv.modsInstalled.replace("{name}", d.name)); await loadPlugins(); }
+      else { setModMsg(t.srv.errPrefix + (await res.text())); }
+    } catch (e: any) { setModMsg(t.srv.errPrefix + String(e)); } finally { setModInstalling(""); }
+  }
+
+  // ----- Modpacks (FTB + Modrinth) : installer un pack = recréer le serveur -----
+  async function searchModpacks(e?: React.FormEvent) {
+    e?.preventDefault();
+    setPackSearching(true); setPackMsg("");
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/modpacks/search?q=${encodeURIComponent(packQuery)}`, { credentials: "include" });
+      if (res.ok) { const d = await res.json(); setPackResults(d.hits ?? []); }
+      else { setPackResults([]); setPackMsg(t.srv.modsSearchErr); }
+    } catch { setPackResults([]); setPackMsg(t.srv.modsSearchErr); } finally { setPackSearching(false); }
+  }
+  async function installModpack(h: ModpackHit) {
+    if (!confirm(t.srv.modpackConfirm.replace("{name}", h.name))) return;
+    setPackInstalling(h.source + ":" + h.id); setPackMsg("");
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/modpacks/install`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: h.source, id: h.id, version_id: h.version_id }),
+      });
+      if (res.ok) { setPackMsg(t.srv.modpackInstalling.replace("{name}", h.name)); fetchServer(); }
+      else { setPackMsg(t.srv.errPrefix + (await res.text())); }
+    } catch (e: any) { setPackMsg(t.srv.errPrefix + String(e)); } finally { setPackInstalling(""); }
+  }
+  // Lien d'installation client du modpack (page publique Modrinth/FTB) à partir de server.modpack.
+  function modpackClientUrl(): { url: string; label: string } | null {
+    const [src, mid] = (server?.modpack || "").split(":");
+    if (src === "modrinth" && mid) return { url: `https://modrinth.com/modpack/${mid}`, label: "Modrinth" };
+    if (src === "ftb" && mid) return { url: `https://www.feed-the-beast.com/modpacks/${mid}`, label: "FTB" };
+    return null;
+  }
+  async function copyClientInstr() {
+    if (!server) return;
+    const addr = `${server.subdomain}.servers.vbt-prog.com:${server.port}`;
+    const c = modpackClientUrl();
+    const txt = t.srv.clientInstrTemplate
+      .replace("{link}", c ? c.url : t.srv.clientInstrModsFallback)
+      .replace("{addr}", addr);
+    try { await navigator.clipboard.writeText(txt); setInstrCopied(true); setTimeout(() => setInstrCopied(false), 2000); } catch { /* clipboard indispo */ }
+  }
+  async function removeModpack() {
+    if (!confirm(t.srv.modpackRemoveConfirm)) return;
+    setPackInstalling("none"); setPackMsg("");
+    try {
+      const res = await fetch(`${API}/api/v1/servers/${id}/modpacks/install`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source: "none" }),
+      });
+      if (res.ok) { setPackMsg(t.srv.modpackRemoved); fetchServer(); }
+      else { setPackMsg(t.srv.errPrefix + (await res.text())); }
+    } catch (e: any) { setPackMsg(t.srv.errPrefix + String(e)); } finally { setPackInstalling(""); }
   }
 
   async function sendCommand(e: React.FormEvent) {
@@ -473,6 +595,10 @@ export default function ServerPage() {
   if (loading) return <div className="p-8 text-zinc-400">{t.dash.loading}</div>;
   if (!server) return null;
 
+  // Serveur moddé (Fabric/Forge ou modpack) → on parle de « mods » (dossier /mods), sinon « plugins ».
+  const isModded = server.loader === "fabric" || server.loader === "forge" || !!server.modpack;
+  const loaderName = server.loader === "fabric" ? "Fabric" : server.loader === "forge" ? "Forge" : server.modpack ? "Modpack" : "Paper";
+
   // Plans affichés pour CE serveur : source partagée (lib/i18n), RAM relevée au
   // plancher du jeu, prix dans la devise courante. Jeux offerts (freeAtFloor :
   // Satisfactory, Hytale) → seul le plan gratuit, au plancher (plans payants masqués).
@@ -497,7 +623,7 @@ export default function ServerPage() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Nav */}
-      <nav className="border-b border-zinc-800 px-6 py-4 flex items-center gap-3">
+      <nav className="sticky top-0 z-10 border-b border-zinc-800/80 bg-zinc-950/70 backdrop-blur px-6 py-4 flex items-center gap-3">
         <Link href="/dashboard" className="text-zinc-400 hover:text-zinc-100 transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
@@ -518,9 +644,17 @@ export default function ServerPage() {
         </div>
       </nav>
 
+      {/* Onglets de navigation */}
+      <div className="border-b border-zinc-800 flex gap-1 overflow-x-auto px-4 max-w-4xl mx-auto w-full">
+        {([["overview", t.srv.tabOverview], ["console", t.srv.tabConsole], ["files", t.srv.tabFiles], ...(server.game === "minecraft" ? [["mods", t.srv.tabMods]] : []), ["settings", t.srv.tabSettings]] as [typeof tab, string][]).map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)} className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${tab === key ? "border-green-500 text-green-400" : "border-transparent text-zinc-400 hover:text-zinc-200"}`}>{label}</button>
+        ))}
+      </div>
+
       <div className="flex-1 p-6 max-w-4xl mx-auto w-full flex flex-col gap-6">
+        {tab === "overview" && (<>
         {/* Infos + actions */}
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6 flex flex-col sm:flex-row gap-6 justify-between">
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6 flex flex-col sm:flex-row gap-6 justify-between">
           <div className="flex flex-col gap-2 text-sm">
             <div className="text-zinc-400">{t.srv.connAddress}</div>
             <code className="font-mono text-green-400">
@@ -554,10 +688,24 @@ export default function ServerPage() {
           </div>
         </div>
 
+        {/* Sauvegarde du monde (Minecraft) */}
+        {server.game === "minecraft" && (
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
+          <div className="flex items-center gap-2 font-semibold mb-1">
+            <Download className="w-5 h-5 text-green-400" /> {t.srv.backupTitle}
+          </div>
+          <p className="text-sm text-zinc-500 mb-4">{t.srv.backupDesc}</p>
+          <a href={`${API}/api/v1/servers/${id}/world/download`} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+            <Download className="w-4 h-4" /> {t.srv.backupBtn}
+          </a>
+        </div>
+        )}
+
         {/* Autorisation interactive (Hytale) : OAuth device-code — le client autorise
             avec SON compte Hytale ; l'image poll automatiquement → passage en running. */}
         {authRequired && (
-          <div className="border border-amber-700/60 bg-gradient-to-b from-amber-950/30 to-zinc-900 rounded-xl p-6 flex flex-col gap-4">
+          <div className="border border-amber-700/60 bg-gradient-to-b from-amber-950/30 to-zinc-900 rounded-2xl p-6 flex flex-col gap-4">
             <div className="flex items-center gap-2 font-semibold text-amber-300 text-lg">
               <KeyRound className="w-5 h-5" /> {t.srv.authTitle}
               {authInfo?.step ? (
@@ -632,9 +780,11 @@ export default function ServerPage() {
             )}
           </div>
         )}
+        </>)}
 
+        {tab === "settings" && (<>
         {/* Upgrade / changement de plan */}
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
           <div className="flex items-center gap-2 font-semibold mb-1">
             <ArrowUpCircle className="w-5 h-5 text-green-400" /> {t.srv.changePlan}
           </div>
@@ -697,7 +847,7 @@ export default function ServerPage() {
 
         {/* Version Minecraft (jeux MC uniquement) */}
         {server.game === "minecraft" && (
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
           <div className="flex items-center gap-2 font-semibold mb-1">
             <RefreshCw className="w-5 h-5 text-green-400" /> {t.srv.mcVersion}
           </div>
@@ -726,9 +876,11 @@ export default function ServerPage() {
           </div>
         </div>
         )}
+        </>)}
 
+        {tab === "console" && (<>
         {/* Console */}
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 font-semibold">
               <Terminal className="w-5 h-5 text-green-400" /> {t.srv.console}
@@ -775,7 +927,7 @@ export default function ServerPage() {
 
         {/* Listing public Hytale (discovery / server browser in-game) */}
         {server.game === "hytale" && (
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
           <div className="flex items-center gap-2 font-semibold mb-1">
             <Globe className="w-5 h-5 text-sky-400" /> {t.srv.discTitle}
           </div>
@@ -817,7 +969,7 @@ export default function ServerPage() {
 
         {/* Gestion des joueurs : RCON, Minecraft uniquement */}
         {server.game === "minecraft" && (
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
           <div className="flex items-center gap-2 font-semibold mb-4">
             <Shield className="w-5 h-5 text-green-400" /> {t.srv.playersTitle}
           </div>
@@ -908,9 +1060,11 @@ export default function ServerPage() {
           )}
         </div>
         )}
+        </>)}
 
+        {tab === "files" && (<>
         {/* Fichiers */}
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2 font-semibold">
               <Folder className="w-5 h-5 text-green-400" /> {t.srv.files}
@@ -975,6 +1129,7 @@ export default function ServerPage() {
             <p className="text-sm text-zinc-500">{t.srv.filesOffline}</p>
           )}
         </div>
+        </>)}
 
         {/* Éditeur de fichier (overlay) */}
         {editPath && (
@@ -1001,13 +1156,36 @@ export default function ServerPage() {
           </div>
         )}
 
-        {/* Plugins & mods — Minecraft (Paper, dossier /plugins) */}
-        {server.game === "minecraft" && (
-        <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-6">
-          <div className="flex items-center gap-2 font-semibold mb-1">
-            <FolderPlus className="w-5 h-5 text-green-400" /> {t.srv.pluginsTitle}
+        {/* Pour les joueurs : installation côté client (serveur moddé / modpack) */}
+        {tab === "mods" && server.game === "minecraft" && (isModded || !!server.modpack) && (
+        <div className="border border-sky-800/50 bg-sky-950/20 rounded-2xl p-6">
+          <div className="flex items-center gap-2 font-semibold mb-1 text-sky-300">
+            <Download className="w-5 h-5" /> {t.srv.clientTitle}
           </div>
-          <p className="text-sm text-zinc-500 mb-4">{t.srv.pluginsDesc}</p>
+          <p className="text-sm text-zinc-400 mb-4">{server.modpack ? t.srv.clientModpackDesc : t.srv.clientModdedDesc}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {(() => { const c = modpackClientUrl(); return c ? (
+              <a href={c.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-400 text-black font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+                <ExternalLink className="w-4 h-4" /> {t.srv.clientOpenPack} {c.label}
+              </a>
+            ) : null; })()}
+            <button onClick={copyClientInstr} className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-lg text-sm transition-colors">
+              {instrCopied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />} {instrCopied ? t.srv.clientCopied : t.srv.clientCopy}
+            </button>
+            <a href="/blog/ajouter-mods-serveur-minecraft" target="_blank" className="inline-flex items-center gap-1 text-sm text-sky-400 hover:underline px-2 py-2">
+              {t.srv.clientTutorial}
+            </a>
+          </div>
+        </div>
+        )}
+
+        {/* Plugins (Paper, /plugins) ou Mods (Fabric/Forge, /mods) selon le loader */}
+        {tab === "mods" && server.game === "minecraft" && (
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
+          <div className="flex items-center gap-2 font-semibold mb-1">
+            <FolderPlus className="w-5 h-5 text-green-400" /> {isModded ? `${t.srv.moddedTitle} (${loaderName})` : t.srv.pluginsTitle}
+          </div>
+          <p className="text-sm text-zinc-500 mb-4">{isModded ? t.srv.moddedDesc : t.srv.pluginsDesc}</p>
           {running ? (
             <>
               {plugins.length > 0 ? (
@@ -1032,7 +1210,43 @@ export default function ServerPage() {
                   <RefreshCw className="w-4 h-4" /> {t.srv.pluginsRestart}
                 </button>
               </div>
-              <p className="text-xs text-zinc-600 mt-3">{t.srv.pluginsRestartHint} — Modrinth · SpigotMC · Hangar.</p>
+              <p className="text-xs text-zinc-600 mt-3">{t.srv.pluginsRestartHint} — {isModded ? "Modrinth · CurseForge" : "Modrinth · SpigotMC · Hangar"}.</p>
+
+              {/* Navigateur Modrinth : recherche + installation 1-clic */}
+              <div className="mt-5 pt-5 border-t border-zinc-800">
+                <div className="text-sm font-medium text-zinc-300 mb-2">{isModded ? t.srv.modsBrowseModsTitle : t.srv.modsBrowsePluginsTitle}</div>
+                <form onSubmit={searchMods} className="flex gap-2 mb-3">
+                  <input value={modQuery} onChange={(e) => setModQuery(e.target.value)} placeholder={t.srv.modsSearchPlaceholder}
+                    className="flex-1 bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500" />
+                  <button type="submit" disabled={modSearching}
+                    className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-40">
+                    {modSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} {t.srv.modsSearch}
+                  </button>
+                </form>
+                {modMsg && <p className="text-xs text-zinc-400 mb-2">{modMsg}</p>}
+                {modResults && (modResults.length === 0 ? (
+                  <p className="text-sm text-zinc-600">{t.srv.modsNoResult}</p>
+                ) : (
+                  <div className="flex flex-col gap-2 max-h-96 overflow-auto">
+                    {modResults.map((m) => (
+                      <div key={m.project_id} className="flex items-center gap-3 bg-black/30 rounded-lg px-3 py-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {m.icon_url ? <img src={m.icon_url} alt="" className="w-8 h-8 rounded shrink-0 object-cover bg-zinc-800" /> : <div className="w-8 h-8 rounded bg-zinc-800 shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium text-zinc-200 truncate">{m.title} <span className="text-xs text-zinc-500 font-normal">{m.author}</span></div>
+                          <div className="text-xs text-zinc-500 truncate">{m.description}</div>
+                        </div>
+                        <span className="text-[11px] text-zinc-600 shrink-0 hidden sm:block">{m.downloads.toLocaleString()} ↓</span>
+                        <button onClick={() => installMod(m.project_id)} disabled={!!modInstalling}
+                          className="flex items-center gap-1 shrink-0 bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                          {modInstalling === m.project_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} {t.srv.modsInstall}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <p className="text-xs text-zinc-600 mt-2">{t.srv.modsBrowseHint}</p>
+              </div>
             </>
           ) : (
             <p className="text-sm text-zinc-500">{t.srv.pluginsOffline}</p>
@@ -1040,14 +1254,65 @@ export default function ServerPage() {
         </div>
         )}
 
+        {/* Modpacks tout-en-un (FTB + Modrinth) — installer un pack = recréer le serveur */}
+        {tab === "mods" && server.game === "minecraft" && (
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
+          <div className="flex items-center gap-2 font-semibold mb-1">
+            <Package className="w-5 h-5 text-green-400" /> {t.srv.modpackTitle}
+          </div>
+          <p className="text-sm text-zinc-500 mb-3">{t.srv.modpackDesc}</p>
+          {server.modpack ? (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-green-800/50 bg-green-950/20 px-3 py-2 text-sm">
+              <span className="text-green-300 truncate">{t.srv.modpackCurrent} <span className="font-mono text-zinc-300">{server.modpack}</span></span>
+              <button onClick={removeModpack} disabled={!!packInstalling} className="shrink-0 text-xs text-zinc-400 hover:text-red-400 underline disabled:opacity-40">{t.srv.modpackRemove}</button>
+            </div>
+          ) : null}
+          <form onSubmit={searchModpacks} className="flex gap-2 mb-3">
+            <input value={packQuery} onChange={(e) => setPackQuery(e.target.value)} placeholder={t.srv.modpackSearchPlaceholder}
+              className="flex-1 bg-black/40 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-green-500" />
+            <button type="submit" disabled={packSearching}
+              className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-40">
+              {packSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} {t.srv.modsSearch}
+            </button>
+          </form>
+          {packMsg && <p className="text-xs text-zinc-400 mb-2">{packMsg}</p>}
+          {packResults && (packResults.length === 0 ? (
+            <p className="text-sm text-zinc-600">{t.srv.modsNoResult}</p>
+          ) : (
+            <div className="flex flex-col gap-2 max-h-[28rem] overflow-auto">
+              {packResults.map((m) => (
+                <div key={m.source + ":" + m.id} className="flex items-center gap-3 bg-black/30 rounded-lg px-3 py-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {m.icon ? <img src={m.icon} alt="" className="w-10 h-10 rounded shrink-0 object-cover bg-zinc-800" /> : <div className="w-10 h-10 rounded bg-zinc-800 shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-zinc-200 truncate">{m.name}
+                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded ${m.source === "ftb" ? "bg-orange-500/15 text-orange-300" : "bg-green-500/15 text-green-300"}`}>{m.source === "ftb" ? "FTB" : "Modrinth"}</span>
+                    </div>
+                    <div className="text-xs text-zinc-500 truncate">{m.summary}</div>
+                  </div>
+                  <span className="text-[11px] text-zinc-600 shrink-0 hidden sm:block">{m.downloads.toLocaleString()} ↓</span>
+                  <button onClick={() => installModpack(m)} disabled={!!packInstalling}
+                    className="flex items-center gap-1 shrink-0 bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                    {packInstalling === m.source + ":" + m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} {t.srv.modpackInstall}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ))}
+          <p className="text-xs text-amber-500/80 mt-3">{t.srv.modpackWarn}</p>
+        </div>
+        )}
+
+        {tab === "settings" && (<>
         {/* Danger zone */}
-        <div className="border border-red-900 rounded-xl p-6 mt-4">
+        <div className="border border-red-900 rounded-2xl p-6 mt-4">
           <div className="font-semibold text-red-400 mb-2">{t.srv.dangerZone}</div>
           <p className="text-sm text-zinc-400 mb-4">{t.srv.deleteDesc}</p>
           <button onClick={deleteServer} className="bg-red-900 hover:bg-red-800 text-red-300 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
             {t.srv.deleteBtn}
           </button>
         </div>
+        </>)}
       </div>
     </div>
   );

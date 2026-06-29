@@ -3,6 +3,8 @@ package servers
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // satisfactoryMsgOffset : décalage, DANS LE BLOC du serveur, entre le port de
@@ -60,8 +62,80 @@ type GameDef struct {
 	Ports func(basePort int) []PortMapping
 	// Env construit les variables d'environnement du container. basePort permet
 	// aux jeux dont les ports sont configurables (Satisfactory) de s'aligner sur
-	// le port alloué.
-	Env func(plan Plan, version string, basePort int) []string
+	// le port alloué. loader = type de serveur (Minecraft : paper|fabric|forge),
+	// modpack = réf de pack ("ftb:..."/"modrinth:..." ou "" = aucun). Tous deux ignorés
+	// par les jeux qui n'en ont pas.
+	Env func(plan Plan, version, loader, modpack string, basePort int) []string
+}
+
+// MinecraftLoaders : types de serveur Minecraft sélectionnables à la création.
+//   paper  → plugins Bukkit/Spigot (dossier /plugins)
+//   fabric → mods Fabric (dossier /mods)
+//   forge  → mods Forge (dossier /mods)
+var MinecraftLoaders = []string{"paper", "fabric", "forge"}
+
+// NormalizeLoader valide/normalise le loader. Minecraft → paper|fabric|forge
+// (défaut paper si invalide). Autres jeux → "paper" (non utilisé).
+func NormalizeLoader(game, loader string) string {
+	if game != "minecraft" {
+		return "paper"
+	}
+	switch loader {
+	case "fabric", "forge":
+		return loader
+	default:
+		return "paper"
+	}
+}
+
+// IsModded : true si le loader charge des mods (dossier /mods) au lieu de plugins.
+func IsModded(loader string) bool {
+	return loader == "fabric" || loader == "forge"
+}
+
+// MinCPUForModded : plancher CPU des serveurs moddés/modpacks. La génération de chunks
+// (C2ME) profite de plusieurs cœurs ; NanoCPUs étant un plafond (pas une réservation),
+// un serveur idle ne consomme pas ces cœurs → généreux sans coût réel.
+const MinCPUForModded = 4.0
+
+// perfProjects : mods de performance Modrinth injectés (via itzg MODRINTH_PROJECTS, qui
+// résout la version compatible) pour un serveur moddé DIRECT (hors modpack). C2ME
+// parallélise la génération de chunks (le gros gain « envoi des chunks »). Vide si loader
+// inconnu → évite un mod incompatible qui empêcherait le démarrage. NE PAS utiliser pour
+// un modpack : le pack inclut souvent déjà Lithium/FerriteCore → doublon = crash.
+func perfProjects(loader string) string {
+	// Slugs Modrinth exacts (vérifiés) — un slug erroné/incompatible fait planter itzg
+	// au démarrage, donc on n'inclut que des mods très largement disponibles.
+	switch loader {
+	case "fabric":
+		return "lithium,ferrite-core,c2me-fabric,krypton"
+	case "forge":
+		return "ferrite-core"
+	}
+	return ""
+}
+
+// javaTagForVersion : le tag d'image itzg (= version de Java) DÉPEND de la version de
+// Minecraft, pas du loader. MC récent (schéma CalVer 26.x / LATEST) est compilé pour
+// Java 25 et ne tourne PAS sous Java 21 ; à l'inverse, beaucoup de mods/packs 1.20.x–
+// 1.21.x exigent Java 21 et refusent Java 25. On mappe donc :
+//   LATEST / 26.x+  → `latest` (Java le plus récent)
+//   1.x (1.18–1.21) → `java21`  (couvre l'immense majorité des mods/packs)
+func javaTagForVersion(version string) string {
+	if version == "" || strings.EqualFold(version, "LATEST") {
+		return "latest"
+	}
+	if parts := strings.SplitN(version, ".", 2); len(parts) > 0 {
+		if maj, err := strconv.Atoi(parts[0]); err == nil && maj >= 2 {
+			return "latest" // nouveau schéma (26.x, 27.x…)
+		}
+	}
+	return "java21"
+}
+
+// MinecraftImage : image itzg avec la bonne version de Java pour la version de MC.
+func MinecraftImage(version string) string {
+	return "itzg/minecraft-server:" + javaTagForVersion(version)
 }
 
 // ApplyFloor relève la RAM/CPU au plancher du jeu si nécessaire (sans jamais
@@ -152,21 +226,61 @@ func GameIDs() []string {
 }
 
 // minecraftEnv : config pour l'image itzg/minecraft-server.
-// TYPE=PAPER → performant + support plugins. Moddable via Fabric/Forge plus tard.
-// version : "LATEST", "1.21.4", etc. basePort n'est pas utilisé (port interne figé).
-func minecraftEnv(plan Plan, version string, _ int) []string {
-	if version == "" {
-		version = "LATEST"
-	}
+// Si modpack est défini → l'image installe le pack complet (TYPE=FTBA / MODRINTH), qui
+// fixe lui-même loader+version+mods. Sinon : loader → TYPE paper/fabric/forge + VERSION.
+// modpack : "ftb:<packId>:<verId>" ou "modrinth:<projId>:<verId>" (verId optionnel).
+func minecraftEnv(plan Plan, version, loader, modpack string, _ int) []string {
 	// MEMORY = tas JVM = la RAM annoncée du plan. La limite mémoire du container
 	// (HostConfig.Memory) est volontairement plus haute pour laisser de la marge
 	// au non-heap (metaspace, threads, buffers directs, GC) — voir container.go.
 	env := []string{
 		"EULA=TRUE",
-		"TYPE=PAPER",
-		"VERSION=" + version,
 		fmt.Sprintf("MEMORY=%dM", plan.RAMMb),
 		"USE_AIKAR_FLAGS=true",
+	}
+	if mp := strings.SplitN(modpack, ":", 3); modpack != "" && len(mp) >= 2 {
+		id, ver := mp[1], ""
+		if len(mp) > 2 {
+			ver = mp[2]
+		}
+		switch mp[0] {
+		case "ftb":
+			env = append(env, "TYPE=FTBA", "FTB_MODPACK_ID="+id)
+			if ver != "" {
+				env = append(env, "FTB_MODPACK_VERSION_ID="+ver)
+			}
+		case "modrinth":
+			env = append(env, "TYPE=MODRINTH", "MODRINTH_MODPACK="+id)
+			if ver != "" {
+				env = append(env, "MODRINTH_VERSION="+ver)
+			}
+		}
+	} else {
+		if version == "" {
+			version = "LATEST"
+		}
+		typ := "PAPER"
+		switch loader {
+		case "fabric":
+			typ = "FABRIC"
+		case "forge":
+			typ = "FORGE"
+		}
+		env = append(env, "TYPE="+typ, "VERSION="+version)
+	}
+	// Optimisations serveurs moddés/modpacks : view-distance plus basse (moins de chunks
+	// à générer/envoyer). Pour les serveurs moddés DIRECTS (hors modpack), on ajoute aussi
+	// les mods de performance (C2ME = génération parallèle, le gros gain). Jamais pour un
+	// modpack : risque de doublon avec les mods du pack (→ crash au démarrage).
+	if modpack != "" || IsModded(loader) {
+		env = append(env, "VIEW_DISTANCE=8", "SIMULATION_DISTANCE=6")
+		if modpack == "" {
+			if p := perfProjects(loader); p != "" {
+				// MODRINTH_ALLOWED_VERSION_TYPE=alpha : C2ME ne publie qu'en alpha, et itzg
+				// refuse les non-release par défaut → sans ça il planterait au démarrage.
+				env = append(env, "MODRINTH_PROJECTS="+p, "MODRINTH_ALLOWED_VERSION_TYPE=alpha")
+			}
+		}
 	}
 	if plan.MaxSlots > 0 {
 		env = append(env, fmt.Sprintf("MAX_PLAYERS=%d", plan.MaxSlots))
@@ -177,7 +291,7 @@ func minecraftEnv(plan Plan, version string, _ int) []string {
 // satisfactoryEnv : config pour l'image wolveix/satisfactory-server.
 // Satisfactory n'a pas de notion de "version" exposée (version ignorée). Les
 // ports sont alignés sur le port de base alloué (le messaging = base + offset).
-func satisfactoryEnv(plan Plan, _ string, base int) []string {
+func satisfactoryEnv(plan Plan, _, _, _ string, base int) []string {
 	env := []string{
 		"STEAMBETA=false",
 		fmt.Sprintf("SERVERGAMEPORT=%d", base),
@@ -192,7 +306,7 @@ func satisfactoryEnv(plan Plan, _ string, base int) []string {
 // hytaleEnv : config pour l'image ghcr.io/terkea/hytale-server (serveur Java 25).
 // Le port QUIC est aligné sur le port de base alloué. L'image télécharge et
 // authentifie le serveur au 1er démarrage (OAuth) — voir le watcher d'auth.
-func hytaleEnv(plan Plan, _ string, base int) []string {
+func hytaleEnv(plan Plan, _, _, _ string, base int) []string {
 	env := []string{
 		fmt.Sprintf("SERVER_PORT=%d", base),
 		fmt.Sprintf("MEMORY=%dM", plan.RAMMb),

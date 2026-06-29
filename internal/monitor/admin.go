@@ -82,3 +82,7 @@ func (c *AdminClient) Metrics(ctx context.Context) (int, []byte, error) {
 func (c *AdminClient) Feedback(ctx context.Context) (int, []byte, error) {
 	return c.do(ctx, http.MethodGet, "/api/v1/admin/feedback", nil)
 }
+
+func (c *AdminClient) PageViews(ctx context.Context) (int, []byte, error) {
+	return c.do(ctx, http.MethodGet, "/api/v1/admin/pageviews", nil)
+}

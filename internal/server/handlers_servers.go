@@ -22,6 +22,7 @@ type createServerRequest struct {
 	Plan    string `json:"plan"`
 	Game    string `json:"game"`
 	Version string `json:"version"`
+	Loader  string `json:"loader"` // Minecraft : paper (défaut) | fabric | forge
 }
 
 func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +94,11 @@ func (s *Server) createServerForUser(ctx context.Context, userID, username strin
 	if floorCPU > cpuCores {
 		cpuCores = floorCPU
 	}
+	// Serveurs Minecraft moddés (Fabric/Forge) : plancher CPU pour la génération de chunks
+	// (C2ME multi-cœur). Plafond seulement → pas de coût quand le serveur est idle.
+	if req.Game == "minecraft" && servers.IsModded(servers.NormalizeLoader(req.Game, req.Loader)) && cpuCores < servers.MinCPUForModded {
+		cpuCores = servers.MinCPUForModded
+	}
 
 	// Placement du node :
 	//  - jeux mc-router (Minecraft) : load-balance (routage par hostname OK cross-node).
@@ -124,6 +130,7 @@ func (s *Server) createServerForUser(ctx context.Context, userID, username strin
 		Game:      req.Game,
 		Plan:      req.Plan,
 		Version:   req.Version,
+		Loader:    servers.NormalizeLoader(req.Game, req.Loader),
 		Node:      node.ID,
 		Status:    "creating",
 		RAMMb:     ramMb,
@@ -146,15 +153,20 @@ func (s *Server) createServerForUser(ctx context.Context, userID, username strin
 // ressources (RAM/CPU) proviennent du GameServer (déjà passées au plancher du
 // jeu) ; les ports, le volume, l'env et le routing dépendent du jeu.
 func (s *Server) buildSpec(gs *servers.GameServer, gameDef servers.GameDef, plan servers.Plan, version string) orchestrator.ServerSpec {
+	image := gameDef.Image
+	if gs.Game == "minecraft" {
+		// Tag Java selon la version de MC (LATEST/26.x → Java 25 ; 1.20–1.21 → Java 21).
+		image = servers.MinecraftImage(version)
+	}
 	spec := orchestrator.ServerSpec{
 		ContainerName: fmt.Sprintf("sgrent-%s", gs.ID),
-		Image:         gameDef.Image,
+		Image:         image,
 		RAMMb:         gs.RAMMb,
 		CPUCores:      gs.CPUCores,
 		DataPath:      gameDef.DataPath,
 		Subdomain:     gs.Subdomain,
 		Network:       s.cfg.MCNetwork,
-		EnvVars:       gameDef.Env(plan, version, gs.Port),
+		EnvVars:       gameDef.Env(plan, version, gs.Loader, gs.Modpack, gs.Port),
 		OpenStdin:     gameDef.ConsoleStdin, // console interactive (Hytale)
 	}
 	for _, p := range gameDef.Ports(gs.Port) {

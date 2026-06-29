@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n";
 import { FeedbackWidget } from "@/components/site-chrome";
+import { PageTracker } from "@/components/page-tracker";
 
 const GADS_ID = "AW-18226964787";
 
@@ -73,6 +74,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">
         <LanguageProvider initialPromo={initialPromo}>
           {children}
+          <PageTracker />
           <FeedbackWidget />
         </LanguageProvider>
       </body>

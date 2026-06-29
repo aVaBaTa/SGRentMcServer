@@ -1,6 +1,7 @@
 package server
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -119,6 +120,36 @@ func (s *Server) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDownloadFile : GET /servers/{id}/files/download?path=...
+// handleDownloadWorld : GET /servers/{id}/world/download → archive .tar.gz du monde
+// Minecraft (dossier /data/world). Marche aussi serveur arrêté (CopyFromContainer lit le
+// FS). Pour une sauvegarde 100% cohérente, arrêter le serveur d'abord (MC sauvegarde en live).
+func (s *Server) handleDownloadWorld(w http.ResponseWriter, r *http.Request) {
+	gs, node, err := s.resolveServer(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if gs.Game != "minecraft" {
+		http.Error(w, "sauvegarde du monde réservée à Minecraft", http.StatusBadRequest)
+		return
+	}
+	if gs.ContainerID == "" {
+		http.Error(w, "serveur introuvable", http.StatusConflict)
+		return
+	}
+	rc, err := node.DownloadDir(r.Context(), gs.ContainerID, "/world")
+	if err != nil {
+		http.Error(w, "monde introuvable (pas encore généré ?)", http.StatusNotFound)
+		return
+	}
+	defer rc.Close()
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", gs.Subdomain+"-world.tar.gz"))
+	gz := gzip.NewWriter(w)
+	defer gz.Close()
+	io.Copy(gz, rc)
+}
+
 func (s *Server) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	gs, node, err := s.resolveServer(r)
 	if err != nil {

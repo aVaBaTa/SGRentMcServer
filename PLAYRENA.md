@@ -52,7 +52,11 @@ décide quand pusher. Convention de branche imposée : `Claude/feature/<desc>` (
   le site public existe déjà ; valider en `curl`ant `https://mcserver.vbt-prog.com`.
 - **Routing nginx** (`SGPortfolio/docker/nginx/nginx.conf`, entrypoint réel = nginx, pas
   Traefik) pour `mcserver.vbt-prog.com` :
-  - `/admin/` → `mcserver-monitor:8090` (Basic Auth, `.htpasswd`)
+  - `/admin/` → `mcserver-monitor:8090`. **Accès : (a) session Discord du proprio (aVaBaTa) → entre
+    SANS mot de passe**, ou (b) **Basic Auth** (`.htpasswd`, user `admin`) en secours. nginx fait
+    `satisfy any` + `auth_request /admin-auth` → `GET /api/v1/admin-session` (API valide le cookie JWT,
+    200 si username ∈ `ADMIN_USERS`, défaut `avabata`). → **aVaBaTa connecté peut toujours ouvrir /admin**.
+    Vérifié : sans cookie=401(Basic), cookie avabata=200, autre user=401. (Ajouter un admin : env `ADMIN_USERS=a,b`.)
   - `/auth/` + `/api/` → `mcserver-api:8080`
   - `/` → `mcserver-frontend:3000`
   - ⚠️ **Piège bind-mount** : éditer `nginx.conf` casse l'inode → `docker restart portfolio-nginx` (pas juste reload).
@@ -462,9 +466,86 @@ bot Discord ; (2) **NAT routeur** UDP+TCP `25566-26565 → 10.0.0.2` (connexion 
     `/plugins`, **téléverse** un `.jar` (mkdir `/plugins` auto + `POST /files/upload?path=/plugins`),
     **supprime**, et **bouton « Redémarrer pour appliquer »**. Réutilise l'API fichiers existante
     (`/files`, `/files/upload`, DELETE `/files`, `/files/mkdir`). i18n FR/EN. Minecraft only.
-  - [ ] **Reste** : install **1-clic depuis Modrinth/SpigotMC** (chercher par nom → télécharger le jar
-    côté backend dans `/plugins`), gestion des **mods Fabric/Forge** (type de serveur ≠ Paper), page
-    `/mods` (placeholder « bientôt »), redémarrage auto après upload (optionnel).
+  - ✅ **Serveurs MODDÉS Fabric/Forge (2026-06-14, déployé + vérifié live)** : choix du **type de
+    serveur** (loader) à la création — **Paper** (plugins, défaut) / **Fabric** / **Forge** (mods).
+    - **DB** : colonne `loader` (migration **`006_server_loader.sql`**, défaut `paper`, backfill OK).
+      `GameServer.Loader` threadé partout (repo INSERT + 4 SELECT/Scan).
+    - **Backend** : `minecraftEnv(plan, version, loader, _)` → `TYPE=PAPER|FABRIC|FORGE` (l'image itzg
+      installe Fabric/Forge auto pour la VERSION). Signature `GameDef.Env` élargie (loader), `buildSpec`
+      passe `gs.Loader`. Helpers `servers.NormalizeLoader`/`IsModded`/`MinecraftLoaders`. `createServerRequest.Loader`
+      validé/normalisé (jeux ≠ minecraft → ignoré).
+    - **Frontend** : sélecteur **Paper/Fabric/Forge** sur `dashboard/[game]` (Minecraft) + hint i18n ;
+      la section fichiers cible **`/mods`** (Fabric/Forge) ou **`/plugins`** (Paper) selon le loader,
+      titre « Mods (Fabric/Forge) » vs « Plugins (Paper) » (i18n `srv.moddedTitle/moddedDesc`).
+    - **Vérifié E2E** : serveur **Fabric** créé via l'API → `TYPE=FABRIC`, `Installing Fabric Loader
+      0.19.3`, `fabricloader 0.19.3` + `Done`. Dossier `/data/mods` créé. **Mod réel** (fabric-api)
+      déposé dans `/mods` + restart → **« Loading 41 mods »** (= fabric-api + sous-modules chargés).
+      Artefacts de test supprimés.
+  - ✅ **Navigateur de mods/plugins + install 1-clic Modrinth (2026-06-14, déployé + vérifié live)** :
+    `internal/server/handlers_mods.go` — `GET /servers/{id}/mods/search?q=` (Modrinth, sans clé ;
+    facets selon loader : `project_type:plugin`+`paper` ou `project_type:mod`+`fabric`/`forge`, +
+    version si ≠ LATEST) et `POST /servers/{id}/mods/install {project_id}` (résout la version
+    compatible → télécharge le jar → `node.WriteFileReader` dans **`/plugins`** (Paper) ou **`/mods`**
+    (moddé), `node.Mkdir` best-effort). Frontend : table de résultats (icône/titre/auteur/downloads +
+    bouton **Installer**) dans l'onglet Mods & Plugins. **Vérifié E2E** : search « worldedit » → 20
+    plugins ; install Chunky → `{"dir":"/plugins","name":"Chunky-Bukkit-1.5.3.jar","status":"ok"}` +
+    jar présent dans le container. Artefact nettoyé.
+  - ✅ **Page serveur refondue en ONGLETS (2026-06-14, déployé)** : `dashboard/servers/[id]` passe d'un
+    long scroll à des onglets cliquables — **Aperçu** (infos+actions, auth Hytale) / **Console**
+    (console + joueurs + discovery Hytale) / **Fichiers** / **Mods & Plugins** (Minecraft only : liste +
+    upload + navigateur Modrinth) / **Paramètres** (plan, version MC, danger zone). State `tab`, barre
+    d'onglets sous la nav, sections gatées par `tab===…`. i18n `srv.tab*` FR/EN.
+  - ✅ **Modpacks tout-en-un FTB + Modrinth (2026-06-14, déployé + vérifié live)** : install 1-clic d'un
+    pack complet façon launcher FTB. `internal/server/handlers_modpacks.go` — `GET …/modpacks/search?q=`
+    (Modrinth `project_type:modpack` + **FTB** `api.modpacks.ch` : populaires si q vide, sinon recherche ;
+    top 6 FTB pour borner le N+1) et `POST …/modpacks/install {source,id,version_id}`. Installer un
+    modpack = **recréer le serveur** : colonne DB **`modpack`** (migration `007`, `"ftb:<id>:<ver>"` /
+    `"modrinth:<id>:<ver>"`), `minecraftEnv` émet `TYPE=FTBA`+`FTB_MODPACK_ID/VERSION_ID` ou
+    `TYPE=MODRINTH`+`MODRINTH_MODPACK/VERSION` (sinon TYPE=loader). RAM relevée à **4 Go mini** à
+    l'install. `source:"none"` → retire le pack (retour Paper). Réutilise `recreateServer` (volume/monde
+    conservé). Frontend : section **« Modpacks (FTB · Modrinth) »** dans l'onglet Mods (recherche +
+    populaires auto + badge source + Installer + retrait), i18n `srv.modpack*`. **Vérifié E2E** : search
+    → 15 packs ; install « Create+ » → container recréé `TYPE=MODRINTH MODRINTH_MODPACK=B2nZ0LBO`, RAM
+    4 Go, logs itzg `Downloading modpack … Fabric 1.20.1` + mods (fabric-api, jei, jade…). Serveur de
+    test supprimé. (FTB : même chaîne `TYPE=FTBA`, vérifié par construction — testable en live au besoin.)
+  - ✅ **Tuto blog + aide install côté joueur (2026-06-14, déployé)** : (1) nouvel article blog
+    **`/blog/ajouter-mods-serveur-minecraft`** (plugins vs mods, ajout 1-clic, modpacks, **comment les
+    joueurs installent le pack côté client** via launchers) — `app/blog/posts.ts` + `POST_GAME` (section
+    Minecraft, 10 articles MC). (2) **Carte « Pour tes joueurs »** sur la page serveur (onglet Mods,
+    visible si moddé/modpack) : **lien vers la page du pack** (Modrinth `modrinth.com/modpack/<id>` ou
+    FTB), bouton **« Copier les instructions joueurs »** (texte prêt à partager : lien + adresse de
+    connexion) + lien vers le tuto. Rappelle que plugins Paper = rien côté client, mods/modpacks =
+    chaque joueur installe le pack. i18n `srv.client*`. Vérifié live (article 200 + listé, carte dans le bundle).
+  - 🐛 **FIX image Java = f(version MC) + optimisations auto moddés (2026-06-16, déployé + vérifié)** :
+    le bon Java **dépend de la version de Minecraft**, pas du loader. MC récent (CalVer **26.x** / LATEST)
+    est compilé **Java 25** et ne tourne PAS sous 21 (`UnsupportedClassVersionError class 69 vs 65`) ;
+    les packs 1.20/1.21 exigent **Java 21** et refusent 25 (`requires version 21`). → `servers.MinecraftImage(version)`
+    + `javaTagForVersion` : LATEST/26.x+ → `latest`, 1.x → `java21`. `buildSpec` choisit l'image selon la
+    **version**. **Modpack install** résout loader **ET version MC réelle** (`resolveModpackMeta`, Modrinth
+    `game_versions` / FTB target `game`) → stockés en DB → bonne image Java + bon dossier `/mods` + recherche
+    de mods. **Optimisations auto serveurs moddés** : `VIEW_DISTANCE=8`/`SIMULATION_DISTANCE=6` (modded+modpack) ;
+    pour les **Fabric/Forge DIRECTS** (hors modpack), `MODRINTH_PROJECTS=lithium,ferrite-core,c2me-fabric,krypton`
+    + `MODRINTH_ALLOWED_VERSION_TYPE=alpha` (C2ME = alpha-only ; itzg résout la version) → **C2ME = génération
+    de chunks parallèle**. JAMAIS d'injection de mods dans un modpack (doublon = crash). Plancher CPU moddé
+    `MinCPUForModded=4` (plafond, pas de coût idle). Front : `isModded`/`modDir` incluent `modpack` ;
+    `effectiveLoader` (modpack non résolu → fabric) pour la recherche de mods.
+    **Vérifié E2E** : Fabric LATEST → `latest`/java25, `Loading 38 mods`, **Done (6.8s)**, C2ME+Lithium+
+    FerriteCore+Krypton auto, 0 restart. Modpack Create+ → loader=fabric, **version 1.21→1.20.1 résolue**,
+    image **java21**. ⚠️ Cobblemon : monde corrompu par les anciens crashs → `rm /data/world` + recréé OK.
+    Gotchas appris : slug `ferrite-core` (pas `ferritecore`), C2ME alpha-only, MC version → Java.
+  - ✅ **Sauvegarde du monde 1-clic (2026-06-16, déployé + vérifié)** : bouton **« Télécharger le monde
+    (.tar.gz) »** (onglet Aperçu, Minecraft) → `GET /servers/{id}/world/download`. `Node.DownloadDir`
+    (CopyFromContainer = flux tar du dossier) gzip-é à la volée → archive `<subdomain>-world.tar.gz`.
+    Marche serveur arrêté aussi. Vérifié sur Cobblemon : `world/` complet (DIM-1/DIM1/advancements…),
+    50 Mo gzip. ⚠️ Pour une sauvegarde 100 % cohérente, arrêter le serveur avant (MC sauvegarde en live).
+    [ ] Idée : restore (upload d'un `.tar.gz` → /data/world) + snapshots auto.
+  - ⚠️ **Limite modpacks (pas notre bug)** : certains packs « single-player » embarquent des mods
+    **client-only** (litematica, malilib…) qui crashent un serveur dédié (`NoClassDefFoundError malilib`).
+    Les packs conçus serveur (Cobblemon) bootent ; pour les autres, retirer les mods client via l'onglet
+    Mods (dossier `/mods`). [ ] Idée : blocklist auto de mods client connus à la création de modpack.
+    Très vieux packs (1.16 = Java 8) non couverts (java21 gère 1.18–1.21).
+  - [ ] **Reste** : source **CurseForge** (clé API requise), choisir un modpack **à la création**
+    (actuellement via recréation d'un serveur existant), redémarrage auto après install de mod isolé.
 - **#M — `/admin` enrichi (multi-pages + métriques + mini-Jira)** : plus d'options dans le
   temps + **graphiques**, passer de **une page à plusieurs** (multi-vues navigables), pouvoir
   **supprimer / ajouter des serveurs pour des utilisateurs**, exposer **le plus de métriques
@@ -634,6 +715,10 @@ bot Discord ; (2) **NAT routeur** UDP+TCP `25566-26565 → 10.0.0.2` (connexion 
     **« Tableau de bord »** (→`/dashboard`) si connecté, **« Se connecter »** sinon. Branché dans
     `SiteNav` (landing, `/games/*`, `/mods`) **et** les nav du **blog** (index + `[slug]`). La session
     (cookie JWT) persistait déjà ; c'était l'UI qui ne la reflétait pas.
+    - ✅ **Bouton « Déconnexion » sur le header public (2026-06-14)** : connecté, `AuthButton` affiche
+      désormais **« Tableau de bord » + « Déconnexion »** (avant : seulement le lien dashboard, aucun
+      moyen de se déconnecter hors du dashboard). Logout → `POST /auth/logout` → redirection accueil
+      (`window.location`). Réutilise l'endpoint/style du logout du dashboard. Déployé (frontend).
 - **#X — Navigation blog/pages publiques depuis le dashboard connecté** (demandé 2026-06-13) : quand
   l'utilisateur est **connecté** et sur son tableau de bord (liste de ses serveurs), il doit pouvoir
   **accéder au blog (et aux autres pages publiques : jeux, plans…) en restant connecté** — sans
@@ -670,6 +755,37 @@ bot Discord ; (2) **NAT routeur** UDP+TCP `25566-26565 → 10.0.0.2` (connexion 
   par canal/usage/jeu + note moyenne + 30 derniers commentaires). **/admin → Dashboard → « 💬 Sondage
   visiteurs »** (rafraîchi 30 s). i18n FR/EN (`t.survey`). Testé E2E (POST→agrégats→affichage).
   But : mesurer le **canal qui convertit** (lié #F Google Ads) et prioriser les améliorations.
+- ✅ **#AA — Tracking des pages visitées dans /admin** (demandé + **FAIT + déployé + vérifié live 2026-06-14**) :
+  savoir **sur quelle page les utilisateurs (sauf aVaBaTa) étaient**. Mécanique :
+  - **Beacon front** : composant `frontend/components/page-tracker.tsx` (`PageTracker`, monté dans
+    `app/layout.tsx`) → `POST /api/v1/track {path,referer}` à **chaque changement de route**
+    (`usePathname`), `credentials:include` + `keepalive`. Si connecté → le backend lit le **cookie JWT**
+    et attache pseudo/`user_id` ; sinon visiteur **anonyme**.
+  - **Backend** : `internal/server/handlers_pageviews.go` — `POST /api/v1/track` (public, best-effort,
+    jamais d'erreur visible) + `GET /api/v1/admin/pageviews` (token admin). Table **`page_views`**
+    (migration **`005_page_views.sql`**, user_id/username/path/referer/created_at). Agrégats **excluent
+    le proprio** (`METRICS_EXCLUDE_USERS`, défaut `avabata`) : vues 24h/7j, connectés distincts,
+    **connectés actifs (30 min) avec leur page actuelle**, **pages les + vues (7 j)**, **flux récent**.
+  - **Monitor** : `AdminClient.PageViews` + proxy `GET /api/pageviews` + section **« 🧭 Navigation des
+    visiteurs »** dans /admin → Dashboard (`cmd/monitor/static/index.html`, refresh 15 s).
+  - **Déployé** : migration `005` appliquée (`psql -U sgrent -d sgrentmc`), rebuild api+monitor+frontend
+    via `./scripts/deploy.sh`. **Vérifié live** : `/api/v1/track` → 204, `/api/v1/admin/pageviews` +
+    proxy monitor renvoient les agrégats, lignes en DB. **Exclusion aVaBaTa confirmée** : les lignes
+    `avabata` sont stockées mais **filtrées de tous les agrégats** admin (recent/by_page/counts).
+  - ✅ **« En ligne maintenant » (présence temps réel, 2026-06-14)** : compteur du nombre
+    d'onglets/visiteurs ayant la page ouverte. **Heartbeat** : chaque onglet envoie `POST
+    /api/v1/presence {vid,path}` toutes les **20 s** (`vid` = id navigateur en localStorage → 1
+    personne = 1 vid, multi-onglets dédupliqués). **Redis** : sorted set `presence:online`
+    (score = dernier battement) + hash `presence:meta` ; TTL **60 s** (purge des vid sans battement).
+    L'agrégat admin renvoie `online_count` + `online[]` (page de chacun), **exclut aVaBaTa**. Section
+    /admin : bloc vert **« 🟢 En ligne maintenant »**. Pas de migration (tout en Redis). Vérifié live
+    (2 vid → count=2, même vid rebattu → compté 1×). ⚠️ Non persisté si flush Redis (se reremplit seul).
+  - **Fuseau horaire** : la DB est en **UTC**. L'API renvoie les horodatages en **ISO 8601 UTC**
+    (`…Z`) et le JS de `/admin` (`fmtLocal`) les affiche dans le **fuseau du navigateur** de l'admin
+    (= heure locale de qui regarde, sans fuseau codé en dur). Appliqué aux **deux** champs (actifs +
+    récent). Redéployé api+monitor 2026-06-14.
+  - [ ] **Rétention** : la table grossit à chaque navigation (pas de purge auto — ajouter un TTL/cron
+    si le volume devient gros). Anonymes inclus (« anonyme »).
 
 ## ⚠️ Blocage connu : connectivité des serveurs UDP (Satisfactory/Hytale)
 

@@ -56,6 +56,10 @@ type Config struct {
 	// (compte proprio/tests). Les serveurs/paiements/users de ces comptes ne comptent pas.
 	MetricsExcludeUsers []string
 
+	// AdminUsers : usernames (Discord) autorisés à accéder à /admin via leur SESSION
+	// (cookie JWT) — nginx les laisse passer sans Basic Auth. Ex. le proprio « avabata ».
+	AdminUsers []string
+
 	MCRouterAPI string            // ex: http://mc-router:26666
 	NodeAddrs   map[string]string // IP LAN par node pour le routing (node1=10.0.0.2,...)
 
@@ -109,6 +113,7 @@ func Load() *Config {
 		MCNetwork:           getEnv("MC_NETWORK", "mc-net"),
 		SeedDir:             getEnv("SEED_DIR", "/seeds"),
 		MetricsExcludeUsers: parseList(getEnv("METRICS_EXCLUDE_USERS", "avabata")),
+		AdminUsers:          parseList(getEnv("ADMIN_USERS", "avabata")),
 		MCRouterAPI:         getEnv("MC_ROUTER_API", "http://mc-router:26666"),
 		NodeAddrs:           parseKV(getEnv("NODE_ADDRS", "node1=10.0.0.2,node2=10.0.0.110")),
 

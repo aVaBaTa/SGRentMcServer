@@ -76,6 +76,9 @@ func (s *Server) mountRoutes() {
 		r.Post("/mail/ingest", s.handleMailIngest) // Cloudflare Email Worker → livraison locale (protégé par secret)
 		r.Get("/promo", s.handlePromo)             // rabais global actif (affichage prix)
 		r.Post("/feedback", s.handleFeedback)      // sondage visiteurs (widget « Ton avis ? »)
+		r.Post("/track", s.handleTrack)            // beacon : page visitée (analytics /admin)
+		r.Get("/admin-session", s.handleAdminSession) // cible auth_request nginx : proprio connecté → /admin sans Basic Auth
+		r.Post("/presence", s.handlePresence)      // heartbeat : « en ligne maintenant » (Redis TTL)
 
 		// --- Routes admin internes (monitor /admin → API, protégées par X-Admin-Token) ---
 		r.Route("/admin", func(r chi.Router) {
@@ -89,6 +92,7 @@ func (s *Server) mountRoutes() {
 			r.Post("/games/{id}/config", s.handleAdminSetGameConfig)
 			r.Get("/metrics", s.handleAdminMetrics)
 			r.Get("/feedback", s.handleAdminFeedback)
+			r.Get("/pageviews", s.handleAdminPageViews)
 		})
 
 		// --- Routes authentifiées ---
@@ -117,11 +121,16 @@ func (s *Server) mountRoutes() {
 				r.Get("/{id}/logs", s.handleServerLogs)
 				r.Get("/{id}/auth", s.handleServerAuth)
 				r.Post("/{id}/command", s.handleServerCommand)
+				r.Get("/{id}/mods/search", s.handleModSearch)   // navigateur Modrinth (mods/plugins)
+				r.Post("/{id}/mods/install", s.handleModInstall) // install 1-clic dans /mods ou /plugins
+				r.Get("/{id}/modpacks/search", s.handleModpackSearch)   // navigateur modpacks (Modrinth + FTB)
+				r.Post("/{id}/modpacks/install", s.handleModpackInstall) // install modpack = recréation
 				r.Post("/{id}/discovery", s.handleServerDiscovery)
 				r.Get("/{id}/files", s.handleListFiles)
 				r.Get("/{id}/files/content", s.handleReadFile)
 				r.Put("/{id}/files/content", s.handleWriteFile)
 				r.Get("/{id}/files/download", s.handleDownloadFile)
+				r.Get("/{id}/world/download", s.handleDownloadWorld) // backup du monde (.tar.gz)
 				r.Post("/{id}/files/upload", s.handleUploadFile)
 				r.Post("/{id}/files/mkdir", s.handleFileMkdir)
 				r.Delete("/{id}/files", s.handleDeleteFile)

@@ -144,6 +144,21 @@ func (n *Node) DownloadFile(ctx context.Context, containerID, rel string) (io.Re
 	return &tarFileReader{tr: tr, src: rc}, hdr.Size, path.Base(full), nil
 }
 
+// DownloadDir retourne le flux TAR brut d'un dossier sous /data (CopyFromContainer
+// produit déjà une archive tar du chemin) — pour télécharger un monde/dossier entier.
+// Le handler peut gzip-er le flux à la volée. Échoue si le chemin n'existe pas.
+func (n *Node) DownloadDir(ctx context.Context, containerID, rel string) (io.ReadCloser, error) {
+	full, err := safeDataPath(rel)
+	if err != nil {
+		return nil, err
+	}
+	rc, _, err := n.cli.CopyFromContainer(ctx, containerID, full)
+	if err != nil {
+		return nil, fmt.Errorf("dossier introuvable: %w", err)
+	}
+	return rc, nil
+}
+
 // WriteFile écrit (crée/écrase) un petit fichier sous /data (configs).
 func (n *Node) WriteFile(ctx context.Context, containerID, rel string, content []byte) error {
 	return n.WriteFileReader(ctx, containerID, rel, int64(len(content)), bytes.NewReader(content))

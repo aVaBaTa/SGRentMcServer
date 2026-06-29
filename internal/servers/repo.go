@@ -16,6 +16,8 @@ type GameServer struct {
 	Game        string    `json:"game"`
 	Plan        string    `json:"plan"`
 	Version     string    `json:"version"`
+	Loader      string    `json:"loader"`  // Minecraft : paper (plugins) | fabric | forge (mods). Autres jeux : "".
+	Modpack     string    `json:"modpack"` // Minecraft : "ftb:<id>:<verId>" ou "modrinth:<id>:<verId>" ; "" = pas de modpack.
 	Node        string    `json:"node"`
 	ContainerID string    `json:"container_id"`
 	Status      string    `json:"status"`
@@ -35,19 +37,19 @@ func NewRepo(db *pgxpool.Pool) *Repo {
 
 func (r *Repo) Create(ctx context.Context, s *GameServer) error {
 	const q = `
-		INSERT INTO game_servers (user_id, name, subdomain, game, plan, version, node, container_id, status, ram_mb, cpu_cores, port)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		INSERT INTO game_servers (user_id, name, subdomain, game, plan, version, loader, modpack, node, container_id, status, ram_mb, cpu_cores, port)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		RETURNING id, created_at
 	`
 	return r.db.QueryRow(ctx, q,
-		s.UserID, s.Name, s.Subdomain, s.Game, s.Plan, s.Version,
+		s.UserID, s.Name, s.Subdomain, s.Game, s.Plan, s.Version, s.Loader, s.Modpack,
 		s.Node, s.ContainerID, s.Status, s.RAMMb, s.CPUCores, s.Port,
 	).Scan(&s.ID, &s.CreatedAt)
 }
 
 func (r *Repo) ListByUser(ctx context.Context, userID string) ([]*GameServer, error) {
 	const q = `
-		SELECT id, user_id, name, subdomain, game, plan, version, node, container_id, status, ram_mb, cpu_cores, port, created_at
+		SELECT id, user_id, name, subdomain, game, plan, version, loader, modpack, node, container_id, status, ram_mb, cpu_cores, port, created_at
 		FROM game_servers WHERE user_id = $1 ORDER BY created_at DESC
 	`
 	rows, err := r.db.Query(ctx, q, userID)
@@ -59,7 +61,7 @@ func (r *Repo) ListByUser(ctx context.Context, userID string) ([]*GameServer, er
 	var list []*GameServer
 	for rows.Next() {
 		s := &GameServer{}
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version,
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version, &s.Loader, &s.Modpack,
 			&s.Node, &s.ContainerID, &s.Status, &s.RAMMb, &s.CPUCores, &s.Port, &s.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -71,7 +73,7 @@ func (r *Repo) ListByUser(ctx context.Context, userID string) ([]*GameServer, er
 // ListAll retourne tous les serveurs (pour la réconciliation des routes au démarrage).
 func (r *Repo) ListAll(ctx context.Context) ([]*GameServer, error) {
 	const q = `
-		SELECT id, user_id, name, subdomain, game, plan, version, node, container_id, status, ram_mb, cpu_cores, port, created_at
+		SELECT id, user_id, name, subdomain, game, plan, version, loader, modpack, node, container_id, status, ram_mb, cpu_cores, port, created_at
 		FROM game_servers
 	`
 	rows, err := r.db.Query(ctx, q)
@@ -83,7 +85,7 @@ func (r *Repo) ListAll(ctx context.Context) ([]*GameServer, error) {
 	var list []*GameServer
 	for rows.Next() {
 		s := &GameServer{}
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version,
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version, &s.Loader, &s.Modpack,
 			&s.Node, &s.ContainerID, &s.Status, &s.RAMMb, &s.CPUCores, &s.Port, &s.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -94,12 +96,12 @@ func (r *Repo) ListAll(ctx context.Context) ([]*GameServer, error) {
 
 func (r *Repo) GetByID(ctx context.Context, id, userID string) (*GameServer, error) {
 	const q = `
-		SELECT id, user_id, name, subdomain, game, plan, version, node, container_id, status, ram_mb, cpu_cores, port, created_at
+		SELECT id, user_id, name, subdomain, game, plan, version, loader, modpack, node, container_id, status, ram_mb, cpu_cores, port, created_at
 		FROM game_servers WHERE id = $1 AND user_id = $2
 	`
 	s := &GameServer{}
 	err := r.db.QueryRow(ctx, q, id, userID).Scan(
-		&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version,
+		&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version, &s.Loader, &s.Modpack,
 		&s.Node, &s.ContainerID, &s.Status, &s.RAMMb, &s.CPUCores, &s.Port, &s.CreatedAt,
 	)
 	if err != nil {
@@ -111,12 +113,12 @@ func (r *Repo) GetByID(ctx context.Context, id, userID string) (*GameServer, err
 // GetByIDAny récupère un serveur par id SANS contrôle de propriétaire (usage admin).
 func (r *Repo) GetByIDAny(ctx context.Context, id string) (*GameServer, error) {
 	const q = `
-		SELECT id, user_id, name, subdomain, game, plan, version, node, container_id, status, ram_mb, cpu_cores, port, created_at
+		SELECT id, user_id, name, subdomain, game, plan, version, loader, modpack, node, container_id, status, ram_mb, cpu_cores, port, created_at
 		FROM game_servers WHERE id = $1
 	`
 	s := &GameServer{}
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version,
+		&s.ID, &s.UserID, &s.Name, &s.Subdomain, &s.Game, &s.Plan, &s.Version, &s.Loader, &s.Modpack,
 		&s.Node, &s.ContainerID, &s.Status, &s.RAMMb, &s.CPUCores, &s.Port, &s.CreatedAt,
 	)
 	if err != nil {
@@ -170,6 +172,24 @@ func (r *Repo) UpdateVersion(ctx context.Context, id, version string) error {
 	_, err := r.db.Exec(ctx,
 		`UPDATE game_servers SET version=$1, updated_at=NOW() WHERE id=$2`,
 		version, id,
+	)
+	return err
+}
+
+// UpdateModpack définit (ou efface si "") la référence de modpack d'un serveur.
+func (r *Repo) UpdateModpack(ctx context.Context, id, modpack string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE game_servers SET modpack=$1, updated_at=NOW() WHERE id=$2`,
+		modpack, id,
+	)
+	return err
+}
+
+// UpdateLoader définit le loader d'un serveur (résolu depuis un modpack, p. ex.).
+func (r *Repo) UpdateLoader(ctx context.Context, id, loader string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE game_servers SET loader=$1, updated_at=NOW() WHERE id=$2`,
+		loader, id,
 	)
 	return err
 }

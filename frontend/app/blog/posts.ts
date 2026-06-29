@@ -592,6 +592,77 @@ export const posts: Post[] = [
       },
     ],
   },
+  {
+    slug: "ajouter-mods-serveur-minecraft",
+    title: "Comment ajouter des mods à ton serveur Minecraft (et les installer côté joueur)",
+    description:
+      "Tutoriel complet pour ajouter des mods et des plugins à ton serveur Minecraft sur Playrena : différence mods/plugins, installation en 1 clic, modpacks FTB/Modrinth, et comment tes joueurs installent le pack côté client.",
+    date: "2026-06-14",
+    keywords: [
+      "ajouter mods serveur minecraft",
+      "installer mods minecraft serveur",
+      "modpack serveur minecraft",
+      "mods fabric forge serveur",
+      "comment installer modpack minecraft",
+    ],
+    sections: [
+      {
+        p: [
+          "Tu veux jouer avec des mods sur ton serveur Minecraft ? Sur Playrena, tu peux en ajouter en quelques clics depuis le tableau de bord. Mais avant de te lancer, il faut comprendre une distinction essentielle : la différence entre un plugin et un mod. Elle change tout, surtout pour tes joueurs.",
+        ],
+      },
+      {
+        h: "Plugin ou mod : la différence à connaître",
+        p: [
+          "Un plugin (Bukkit/Spigot, sur un serveur Paper) tourne uniquement côté serveur. Tes joueurs se connectent avec un client Minecraft normal, sans rien installer. C'est parfait pour la gestion : permissions, économie, protection de zones, mini-jeux.",
+          "Un mod (Fabric ou Forge) modifie le jeu lui-même, des deux côtés. Pour rejoindre un serveur moddé, chaque joueur doit installer les mêmes mods et le même loader sur son PC. Le serveur n'envoie pas les mods automatiquement : un client vanilla ne peut pas les recevoir. C'est le cas de tous les mods de contenu (Create, machines, nouveaux biomes, objets...).",
+          "En résumé : plugins = rien à faire côté joueur ; mods = chaque joueur installe le pack chez lui.",
+        ],
+      },
+      {
+        h: "Choisir le bon type de serveur",
+        p: [
+          "Au moment de créer ton serveur Minecraft sur Playrena, tu choisis le type : Paper (plugins), Fabric (mods) ou Forge (mods). Si tu veux des mods, choisis Fabric ou Forge selon les mods qui t'intéressent — la plupart des gros mods existent pour les deux, vérifie sur leur page. Tu peux aussi partir d'un modpack tout prêt (voir plus bas).",
+        ],
+      },
+      {
+        h: "Ajouter un mod ou un plugin en 1 clic",
+        p: [
+          "Dans ton tableau de bord, ouvre ton serveur puis l'onglet « Mods & Plugins ». Tu y trouves un moteur de recherche connecté à Modrinth : tape le nom du mod ou du plugin, et clique sur « Installer ». Playrena télécharge automatiquement la bonne version (compatible avec le loader et la version de ton serveur) et la place au bon endroit (dossier /mods pour un serveur moddé, /plugins pour Paper).",
+          "Tu peux aussi téléverser manuellement un fichier .jar si tu l'as déjà. Dans tous les cas, clique sur « Redémarrer pour appliquer » après l'ajout : les mods et plugins ne se chargent qu'au démarrage du serveur.",
+        ],
+      },
+      {
+        h: "Installer un modpack complet (façon FTB)",
+        p: [
+          "Tu ne veux pas choisir les mods un par un ? Installe un modpack : un pack complet (loader + version + dizaines de mods déjà assemblés et testés ensemble). Dans l'onglet « Mods & Plugins », la section Modpacks te laisse chercher parmi les packs Feed-The-Beast (FTB) et Modrinth, ou parcourir les plus populaires. Un clic sur « Installer » recrée ton serveur avec le pack au complet — Playrena relève automatiquement la RAM à 4 Go, car un modpack est gourmand.",
+          "C'est l'équivalent du launcher FTB, mais côté serveur : tu choisis le pack, et tout s'installe tout seul.",
+        ],
+      },
+      {
+        h: "Comment tes joueurs installent le pack (côté client)",
+        p: [
+          "Pour un serveur moddé ou un modpack, chaque joueur doit installer la même chose sur son PC avant de se connecter. La méthode la plus simple passe par un launcher :",
+          "1. Installer un launcher : FTB App, CurseForge, l'app Modrinth, ou Prism Launcher (MultiMC). Ils gèrent les mods et le loader pour toi.",
+          "2. Installer le même modpack (ou les mêmes mods + le même loader Fabric/Forge, dans les mêmes versions que le serveur).",
+          "3. Lancer le jeu via ce profil moddé, puis rejoindre ton serveur avec l'adresse affichée dans le tableau de bord (du type ton-serveur.servers.vbt-prog.com).",
+          "Si les versions ne correspondent pas, le jeu refuse la connexion (« mod mismatch ») — assure-toi que tout le monde a exactement le même pack.",
+        ],
+      },
+      {
+        h: "Quelques conseils",
+        p: [
+          "Garde les mêmes versions partout (serveur et joueurs). Prévois assez de RAM : un serveur moddé ou un modpack demande facilement 4 à 8 Go selon le nombre de mods et de joueurs — pense à monter ton plan si besoin. Et redémarre toujours le serveur après avoir ajouté ou retiré un mod.",
+        ],
+      },
+      {
+        h: "En résumé",
+        p: [
+          "Sur Playrena, ajouter des mods se fait en quelques clics : choisis Fabric/Forge (ou un modpack), cherche et installe depuis l'onglet Mods & Plugins, redémarre. Pour les plugins Paper, tes joueurs n'ont rien à faire. Pour les mods et modpacks, ils installent le même pack via un launcher, puis rejoignent ton serveur. Crée ton serveur Minecraft et lance-toi.",
+        ],
+      },
+    ],
+  },
 ];
 
 export function getPost(slug: string): Post | undefined {
@@ -611,6 +682,7 @@ const POST_GAME: Record<string, GameCat> = {
   "combien-de-ram-serveur-minecraft": "minecraft",
   "reduire-lag-serveur-minecraft": "minecraft",
   "installer-plugins-serveur-minecraft-paper": "minecraft",
+  "ajouter-mods-serveur-minecraft": "minecraft",
   "creer-serveur-satisfactory-dedie": "satisfactory",
   "hytale-vs-minecraft-serveur": "general",
   "hebergement-serveur-jeu-quebec": "general",

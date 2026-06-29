@@ -11,11 +11,34 @@ export interface Game {
 }
 
 export const GAMES: Game[] = [
+  // --- En ligne ---
   { id: "minecraft", name: "Minecraft", href: "/games/minecraft", status: "live", accent: "from-green-500 to-emerald-600" },
   { id: "hytale", name: "Hytale", href: "/games/hytale", status: "live", accent: "from-blue-500 to-indigo-600", minRamGb: 10, freeAtFloor: true },
-  { id: "rust", name: "Rust", href: "/games/rust", status: "soon", accent: "from-red-500 to-orange-600" },
   { id: "satisfactory", name: "Satisfactory", href: "/games/satisfactory", status: "live", accent: "from-orange-500 to-amber-600", minRamGb: 4, freeAtFloor: true },
+
+  // --- Bientôt (jeux populaires avec serveur dédié — href "#" tant qu'il n'y a pas de page) ---
+  { id: "rust", name: "Rust", href: "/games/rust", status: "soon", accent: "from-red-500 to-orange-600" },
   { id: "ark", name: "ARK: Survival", href: "/games/ark", status: "soon", accent: "from-fuchsia-500 to-purple-600" },
+  { id: "valheim", name: "Valheim", href: "#", status: "soon", accent: "from-sky-500 to-cyan-600" },
+  { id: "palworld", name: "Palworld", href: "#", status: "soon", accent: "from-yellow-400 to-amber-500" },
+  { id: "terraria", name: "Terraria", href: "#", status: "soon", accent: "from-emerald-500 to-teal-600" },
+  { id: "7dtd", name: "7 Days to Die", href: "#", status: "soon", accent: "from-amber-700 to-red-800" },
+  { id: "project-zomboid", name: "Project Zomboid", href: "#", status: "soon", accent: "from-rose-600 to-red-700" },
+  { id: "v-rising", name: "V Rising", href: "#", status: "soon", accent: "from-purple-700 to-fuchsia-800" },
+  { id: "enshrouded", name: "Enshrouded", href: "#", status: "soon", accent: "from-violet-500 to-purple-700" },
+  { id: "sons-of-the-forest", name: "Sons of the Forest", href: "#", status: "soon", accent: "from-emerald-700 to-green-900" },
+  { id: "conan-exiles", name: "Conan Exiles", href: "#", status: "soon", accent: "from-orange-600 to-amber-700" },
+  { id: "factorio", name: "Factorio", href: "#", status: "soon", accent: "from-yellow-600 to-amber-700" },
+  { id: "core-keeper", name: "Core Keeper", href: "#", status: "soon", accent: "from-indigo-500 to-violet-700" },
+  { id: "dst", name: "Don't Starve Together", href: "#", status: "soon", accent: "from-stone-500 to-zinc-700" },
+  { id: "cs2", name: "Counter-Strike 2", href: "#", status: "soon", accent: "from-amber-500 to-yellow-600" },
+  { id: "gmod", name: "Garry's Mod", href: "#", status: "soon", accent: "from-sky-600 to-indigo-700" },
+  { id: "unturned", name: "Unturned", href: "#", status: "soon", accent: "from-lime-500 to-green-600" },
+  { id: "bannerlord", name: "Bannerlord (Together)", href: "#", status: "soon", accent: "from-rose-600 to-red-800" },
+  { id: "vintage-story", name: "Vintage Story", href: "#", status: "soon", accent: "from-teal-600 to-emerald-700" },
+  { id: "necesse", name: "Necesse", href: "#", status: "soon", accent: "from-cyan-500 to-sky-600" },
+  { id: "eco", name: "Eco", href: "#", status: "soon", accent: "from-green-500 to-lime-600" },
+  { id: "soulmask", name: "Soulmask", href: "#", status: "soon", accent: "from-lime-600 to-emerald-700" },
 ];
 
 export function getGame(id: string): Game | undefined {

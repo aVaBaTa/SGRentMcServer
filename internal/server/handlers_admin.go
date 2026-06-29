@@ -3,10 +3,27 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/aVaBaTa/SGRentMcServer/internal/servers"
 	"github.com/go-chi/chi/v5"
 )
+
+// handleAdminSession : 200 si le visiteur est connecté (cookie JWT) avec un username
+// listé dans AdminUsers (le proprio, ex. aVaBaTa), sinon 401. Cible de l'`auth_request`
+// nginx : un proprio connecté accède à /admin sans Basic Auth (qui reste en secours).
+func (s *Server) handleAdminSession(w http.ResponseWriter, r *http.Request) {
+	u := s.extractUsername(r) // lit + valide le cookie « token »
+	if u != "" {
+		for _, a := range s.cfg.AdminUsers {
+			if strings.EqualFold(u, a) {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+	}
+	http.Error(w, "unauthorized", http.StatusUnauthorized)
+}
 
 // adminAuthorized vérifie le secret partagé entre le monitor (/admin) et l'API.
 // Ces endpoints sont internes (réseau Docker) ; ils ne passent PAS par le JWT
