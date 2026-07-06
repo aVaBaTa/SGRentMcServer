@@ -17,7 +17,7 @@ export const GAMES: Game[] = [
   { id: "satisfactory", name: "Satisfactory", href: "/games/satisfactory", status: "live", accent: "from-orange-500 to-amber-600", minRamGb: 4, freeAtFloor: true },
   { id: "valheim", name: "Valheim", href: "/games/valheim", status: "live", accent: "from-sky-500 to-cyan-600", minRamGb: 4 },
   // Mod coop exclusif (M&B II: Bannerlord) — serveur privé Playrena, offert au plancher pour le lancement.
-  { id: "calradia-coop", name: "Bannerlord : Calradia-Coop", href: "/games/calradia-coop", status: "live", accent: "from-rose-600 to-red-800", minRamGb: 1, freeAtFloor: true },
+  { id: "calradia-coop", name: "Mount & Blade II : Calradia-Coop", href: "/games/calradia-coop", status: "live", accent: "from-rose-600 to-red-800", minRamGb: 1, freeAtFloor: true },
 
   // --- Bientôt (jeux populaires avec serveur dédié — href "#" tant qu'il n'y a pas de page) ---
   { id: "rust", name: "Rust", href: "/games/rust", status: "soon", accent: "from-red-500 to-orange-600" },
