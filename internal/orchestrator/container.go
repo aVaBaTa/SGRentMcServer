@@ -278,6 +278,11 @@ func (n *Node) Logs(ctx context.Context, containerID string, tail int) (string, 
 func (n *Node) pullImage(ctx context.Context, img string) error {
 	rc, err := n.cli.ImagePull(ctx, img, image.PullOptions{})
 	if err != nil {
+		// Image buildée localement (ex. calradia-server:latest), absente des
+		// registries : si le node l'a déjà, on crée le container sans pull.
+		if _, _, inspectErr := n.cli.ImageInspectWithRaw(ctx, img); inspectErr == nil {
+			return nil
+		}
 		return err
 	}
 	defer rc.Close()

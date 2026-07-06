@@ -16,6 +16,8 @@ export const GAMES: Game[] = [
   { id: "hytale", name: "Hytale", href: "/games/hytale", status: "live", accent: "from-blue-500 to-indigo-600", minRamGb: 10, freeAtFloor: true },
   { id: "satisfactory", name: "Satisfactory", href: "/games/satisfactory", status: "live", accent: "from-orange-500 to-amber-600", minRamGb: 4, freeAtFloor: true },
   { id: "valheim", name: "Valheim", href: "/games/valheim", status: "live", accent: "from-sky-500 to-cyan-600", minRamGb: 4 },
+  // Mod coop exclusif (M&B II: Bannerlord) — serveur privé Playrena, offert au plancher pour le lancement.
+  { id: "calradia-coop", name: "Bannerlord : Calradia-Coop", href: "/games/calradia-coop", status: "live", accent: "from-rose-600 to-red-800", minRamGb: 1, freeAtFloor: true },
 
   // --- Bientôt (jeux populaires avec serveur dédié — href "#" tant qu'il n'y a pas de page) ---
   { id: "rust", name: "Rust", href: "/games/rust", status: "soon", accent: "from-red-500 to-orange-600" },
@@ -34,7 +36,6 @@ export const GAMES: Game[] = [
   { id: "cs2", name: "Counter-Strike 2", href: "#", status: "soon", accent: "from-amber-500 to-yellow-600" },
   { id: "gmod", name: "Garry's Mod", href: "#", status: "soon", accent: "from-sky-600 to-indigo-700" },
   { id: "unturned", name: "Unturned", href: "#", status: "soon", accent: "from-lime-500 to-green-600" },
-  { id: "bannerlord", name: "Bannerlord (Together)", href: "#", status: "soon", accent: "from-rose-600 to-red-800" },
   { id: "vintage-story", name: "Vintage Story", href: "#", status: "soon", accent: "from-teal-600 to-emerald-700" },
   { id: "necesse", name: "Necesse", href: "#", status: "soon", accent: "from-cyan-500 to-sky-600" },
   { id: "eco", name: "Eco", href: "#", status: "soon", accent: "from-green-500 to-lime-600" },
@@ -61,6 +62,7 @@ export const GAME_THEME: Record<string, GameTheme> = {
   valheim:      { text: "text-cyan-400",  btn: "bg-cyan-500 hover:bg-cyan-400 shadow-cyan-500/30",   border: "border-cyan-500/30",  glow: "bg-cyan-500/15" },
   rust:         { text: "text-orange-400", btn: "bg-orange-500 hover:bg-orange-400 shadow-orange-500/30", border: "border-orange-500/30", glow: "bg-orange-500/15" },
   ark:          { text: "text-fuchsia-400", btn: "bg-fuchsia-500 hover:bg-fuchsia-400 shadow-fuchsia-500/30", border: "border-fuchsia-500/30", glow: "bg-fuchsia-500/15" },
+  "calradia-coop": { text: "text-rose-400", btn: "bg-rose-500 hover:bg-rose-400 shadow-rose-500/30", border: "border-rose-500/30", glow: "bg-rose-500/15" },
 };
 
 export const gameTheme = (id: string): GameTheme =>

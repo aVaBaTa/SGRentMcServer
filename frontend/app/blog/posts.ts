@@ -14,6 +14,48 @@ export interface Post {
 
 export const posts: Post[] = [
   {
+    slug: "calradia-coop-bannerlord-serveur",
+    title: "Calradia-Coop : jouer la campagne de Bannerlord en coop (et sans PC hôte)",
+    description:
+      "Calradia-Coop est un mod exclusif qui amène la campagne de Mount & Blade II: Bannerlord en coopération : monde partagé, renforts en bataille, clans communs. Et Playrena héberge les serveurs 24/7.",
+    date: "2026-07-06",
+    keywords: [
+      "bannerlord coop",
+      "mod multijoueur bannerlord",
+      "bannerlord campagne multijoueur",
+      "serveur bannerlord",
+      "calradia coop",
+      "mount and blade 2 coop",
+    ],
+    sections: [
+      {
+        p: [
+          "Mount & Blade II: Bannerlord a une des meilleures campagnes solo du genre — et un multijoueur officiel limité à des modes de combat. Calradia-Coop, un mod développé chez Playrena, corrige ça : la vraie campagne, jouée à plusieurs, dans le même monde de Calradia.",
+        ],
+      },
+      {
+        h: "Ce que le mod fait déjà",
+        p: [
+          "Un monde partagé pour tous les joueurs : la date, les guerres, la diplomatie et les changements de territoire se synchronisent en continu, et chacun voit les partis des autres bouger en direct sur la carte. Quand un allié engage une bataille, tu peux lui envoyer des renforts et le résultat se répercute dans le monde commun.",
+          "Chaque joueur crée son propre héros et son propre clan, avec un pacte de clan pour partager une destinée. Rejoindre une partie se fait via les amis Steam ou un code de session court (CALR-XXXX) — personne ne tape d'adresse IP. La sauvegarde est commune et se synchronise automatiquement : on arrête ce soir, on reprend demain exactement au même endroit.",
+        ],
+      },
+      {
+        h: "Le vrai plus : un monde 24/7 sans PC hôte",
+        p: [
+          "Normalement, un joueur doit héberger la partie — et quand il éteint son PC, le monde s'arrête. Avec un serveur loué sur Playrena, le monde de Calradia tourne 24/7 sur nos machines : tout le monde se connecte en sortant, donc aucune redirection de port, aucun NAT à configurer, et la campagne continue de vivre même quand personne ne dort devant son écran.",
+          "Le premier joueur connecté prend l'autorité de simulation et le monde persiste sur disque entre les sessions. C'est exactement le modèle « serveur dédié » que Bannerlord n'a jamais offert pour sa campagne.",
+        ],
+      },
+      {
+        h: "Offert au lancement",
+        p: [
+          "Le serveur Calradia-Coop est ultra léger (il tourne dès 1 Go de RAM), alors on l'offre au plancher pour le lancement : crée ton serveur gratuitement depuis le panel, comme pour Minecraft. Le mod lui-même sera distribué publiquement très bientôt — suis le devlog sur calradiacoop.vbt-prog.com pour être là au jour 1.",
+        ],
+      },
+    ],
+  },
+  {
     slug: "hytale-vs-minecraft-serveur",
     title: "Hytale vs Minecraft : quel serveur de jeu héberger en 2026 ?",
     description:
@@ -670,7 +712,7 @@ export function getPost(slug: string): Post | undefined {
 }
 
 // ---- Catégorisation des articles par jeu (sections du blog) ----
-export type GameCat = "minecraft" | "hytale" | "satisfactory" | "general";
+export type GameCat = "minecraft" | "hytale" | "satisfactory" | "calradia" | "general";
 
 const POST_GAME: Record<string, GameCat> = {
   "creer-serveur-hytale-tutoriel": "hytale",
@@ -684,6 +726,7 @@ const POST_GAME: Record<string, GameCat> = {
   "installer-plugins-serveur-minecraft-paper": "minecraft",
   "ajouter-mods-serveur-minecraft": "minecraft",
   "creer-serveur-satisfactory-dedie": "satisfactory",
+  "calradia-coop-bannerlord-serveur": "calradia",
   "hytale-vs-minecraft-serveur": "general",
   "hebergement-serveur-jeu-quebec": "general",
 };
@@ -697,6 +740,7 @@ export const BLOG_CATEGORIES: { game: GameCat; label: string }[] = [
   { game: "minecraft", label: "Minecraft" },
   { game: "hytale", label: "Hytale" },
   { game: "satisfactory", label: "Satisfactory" },
+  { game: "calradia", label: "Bannerlord — Calradia-Coop" },
   { game: "general", label: "Guides généraux" },
 ];
 

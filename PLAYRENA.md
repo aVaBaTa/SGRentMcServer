@@ -97,6 +97,7 @@ décide quand pusher. Convention de branche imposée : `Claude/feature/<desc>` (
 | **Satisfactory** | ✅ live | `wolveix/satisfactory-server` | base/udp+tcp (jeu) + base+1/tcp (messaging), identité, **dans le bloc** | `/config` | plancher **4 Go gratuit** (promo), IP:port direct, pas de RCON |
 | **Hytale** | ✅ live | `ghcr.io/terkea/hytale-server` | base/udp (QUIC, `SERVER_PORT`) | `/data` | plancher **10 Go** (réaliste, assumé non rentable), **fichiers pré-téléchargés** (seed → pas de re-download) → le **client** ne fait que l'**auth serveur** (device-code, panel affiche URL+code), IP:port direct |
 | **Valheim** | ✅ live | `lloesche/valheim-server` | base/udp (jeu) + base+1/udp, identité, **dans le bloc** | `/config` | plancher **4 Go** (≤10 joueurs, cap natif), IP:port direct, `SERVER_PASS` défaut `playrena` (à rendre configurable), produit **payant** (grille complète) |
+| **Calradia-Coop (M&B II)** | ✅ live | `calradia-server:latest` (**image LOCALE**, jamais sur registry — 🔒 confidentiel) | base/tcp + base/udp (même port, `CALRADIA_ADDR`) | `/data` | **notre propre mod Bannerlord** (repo privé Calradia-Coop) ; plancher 1 Go/1 cœur, `freeAtFloor` (offert lancement) ; joueurs = slots du plan cap 8 ; UPnP OFF en container ; vitrine `calradiacoop.vbt-prog.com` |
 | Rust, ARK | ⏳ soon | — | — | — | marqués « Bientôt » dans `games.ts` |
 
 **✅ Session 2026-06-29 — Valheim ajouté + promo /games + redeploy** : (1) **Valheim live** (1er jeu
@@ -107,6 +108,29 @@ au plancher (`freeAtFloor` → `visiblePlans`), payants masqués. (3) **Redéplo
 (active l'allocateur de ports **par blocs** + handlers mods/pageviews commités + Valheim) et
 `mcserver-frontend`. Migrations 005/006/007 **déjà appliquées**. Validé en public (Valheim 200, masquage
 OK, Hytale 10 Go).
+
+**✅ Session 2026-07-06 — Calradia-Coop (Mount & Blade II: Bannerlord) ajouté + écosystème web** :
+mod coop maison (repo privé `aVaBaTa/Calradia-Coop`, branche `claude/BLT/v0.0.1`, cloné dans
+`~/Shared_Projects/2026/Calradia-Coop`). **🔒 Code source + serveur Rust = CONFIDENTIELS — jamais
+publiés, aucun lien GitHub/téléchargement sur les pages publiques.** (1) **Image Docker locale**
+`calradia-server:latest` (server/Dockerfile, 76 Mo, monde 7777 tcp+udp + rendezvous 7778 ; cible bin
+`calradia-rendezvous` manquante ajoutée) — `pullImage` (orchestrateur) a maintenant un **repli
+image-locale**. (2) **GameDef `calradia-coop`** (games.go) : port unique tcp+udp aligné sur le bloc,
+1 Go/1 cœur, `CALRADIA_MAX_GAMEPLAY`=slots cap 8, `CALRADIA_UPNP=0` (bridge Docker). (3) **Frontend** :
+`games.ts` live `freeAtFloor` (entrée « Bannerlord (Together) » remplacée), page `/games/calradia-coop`
+(features du mod, 4 captures `public/games/calradia/`, crédits → portfolio + vitrine), i18n FR/EN,
+article blog `calradia-coop-bannerlord-serveur` + catégorie blog « Bannerlord — Calradia-Coop ».
+(4) **Vitrine du mod `calradiacoop.vbt-prog.com`** : statique bilingue dans `Calradia-Coop/site/`
+(container `calradiacoop-web` nginx:alpine + bloc nginx SGPortfolio) — vitrine + devlog #1, gatekeep
+(pas de download). ⚠️ **DNS Cloudflare `calradiacoop` → 24.157.140.226 = action Simon.** (5) **Infra
+xe80dell** : containers `calradia-rendezvous` (7778) + `calradia-world` (7777) up ; **NAT routeur posé
+par UPnP sans sudo** (`scripts/upnp-map.py` — la box Helix XB7 ne répond pas au SSDP (ufw) → `--desc
+http://10.0.0.1:49152/IGDdevicedesc_brlan0.xml`, et n'accepte AddPortMapping que depuis l'IP cible →
+bind source 10.0.0.2 ; bail permanent OK) ; cron 6 h `upnp-refresh.sh` (la table UPnP saute au reboot
+routeur) ; **7777+7778 vérifiés joignables depuis Internet** (check-host.net). La plage 25566-26565
+reste une règle routeur manuelle (table UPnP trop petite pour 1000 ports). (6) **Annonces** : kit prêt
+dans `Calradia-Coop/docs/25-annonces-lancement.md`. (7) Portfolio : lien « Calradia-Coop » (Écosystème).
+Reste : clé d'accès par instance (protocole v0.0.2), DNS, poster les annonces.
 
 **Catalogue à étendre (backlog #U)** : ~~Valheim~~ (fait), Palworld, Terraria, The Forest, 7 Days to Die,
 ARK: Survival Evolved, ARK: Survival Ascended, Stardew Valley + autres candidats populaires.

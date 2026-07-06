@@ -222,6 +222,26 @@ var games = map[string]GameDef{
 		},
 		Env: valheimEnv,
 	},
+	"calradia-coop": {
+		ID: "calradia-coop",
+		// Image buildée LOCALEMENT sur xe80dell depuis le repo privé Calradia-Coop
+		// (server/Dockerfile) — jamais poussée sur un registry (serveur confidentiel,
+		// offre de location uniquement). pullImage a un repli image-locale.
+		Image:        "calradia-server:latest",
+		DataPath:     "/data", // CALRADIA_DATA_DIR : monde persisté + logs
+		UsesMCRouter: false,   // TCP+UDP bruts → IP:port direct
+		MinRAMMb:     1024,    // serveur Rust std-only, très léger
+		MinCPUCores:  1.0,
+		Ports: func(base int) []PortMapping {
+			// Le monde écoute TCP (frames) ET UDP (canal positions) sur le MÊME
+			// port, configuré via CALRADIA_ADDR → hôte == interne, aligné sur base.
+			return []PortMapping{
+				{HostPort: base, Internal: base, Proto: "tcp"}, // monde (login, save-sync, relay)
+				{HostPort: base, Internal: base, Proto: "udp"}, // positions haute fréquence
+			}
+		},
+		Env: calradiaEnv,
+	},
 }
 
 // GetGame retourne la définition d'un jeu, ou une erreur si l'id est inconnu.
@@ -349,5 +369,25 @@ func valheimEnv(_ Plan, _, _, _ string, base int) []string {
 		"WORLD_NAME=Playrena",
 		"SERVER_PASS=playrena",
 		"SERVER_PUBLIC=1",
+	}
+}
+
+// calradiaEnv : config pour l'image locale calradia-server (mod Calradia-Coop,
+// Mount & Blade II: Bannerlord). Le serveur écoute TCP+UDP sur CALRADIA_ADDR,
+// aligné sur le port de base alloué. UPnP coupé : en bridge Docker il
+// annoncerait l'IP 172.x du container au routeur (injoignable) — le NAT passe
+// par le publish Docker + la plage de ports Playrena. Joueurs gameplay = slots
+// du plan, plafonnés à 8 (limite testée du mod v0.0.1) ; les spectateurs
+// gardent le défaut du serveur (32).
+func calradiaEnv(plan Plan, _, _, _ string, base int) []string {
+	gameplay := plan.MaxSlots
+	if gameplay <= 0 || gameplay > 8 {
+		gameplay = 8
+	}
+	return []string{
+		fmt.Sprintf("CALRADIA_ADDR=0.0.0.0:%d", base),
+		"CALRADIA_DATA_DIR=/data",
+		"CALRADIA_UPNP=0",
+		fmt.Sprintf("CALRADIA_MAX_GAMEPLAY=%d", gameplay),
 	}
 }
