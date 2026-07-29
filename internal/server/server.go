@@ -80,6 +80,13 @@ func (s *Server) mountRoutes() {
 		r.Get("/admin-session", s.handleAdminSession) // cible auth_request nginx : proprio connecté → /admin sans Basic Auth
 		r.Post("/presence", s.handlePresence)      // heartbeat : « en ligne maintenant » (Redis TTL)
 
+		// --- Calradia-Coop : accès anticipé (site calradiacoop.vbt-prog.com) ---
+		r.Route("/calradia", func(r chi.Router) {
+			r.Get("/download-auth", s.handleCalradiaDownloadAuth) // cible auth_request nginx (gate /files/)
+			r.Post("/early-access", s.handleCalradiaApply)        // candidature (session Discord requise)
+			r.Get("/early-access/status", s.handleCalradiaStatus) // état pour l'UI /download
+		})
+
 		// --- Routes admin internes (monitor /admin → API, protégées par X-Admin-Token) ---
 		r.Route("/admin", func(r chi.Router) {
 			r.Get("/catalog", s.handleAdminCatalog)
@@ -93,6 +100,12 @@ func (s *Server) mountRoutes() {
 			r.Get("/metrics", s.handleAdminMetrics)
 			r.Get("/feedback", s.handleAdminFeedback)
 			r.Get("/pageviews", s.handleAdminPageViews)
+			r.Get("/calradia/early-access", s.handleAdminCalradiaList)
+			r.Post("/calradia/early-access/{id}/status", s.handleAdminCalradiaDecide)
+			r.Get("/calradia/release", s.handleAdminCalradiaGetRelease)  // date annoncée + interrupteur public
+			r.Post("/calradia/release", s.handleAdminCalradiaSetRelease) // reporter la sortie / ouvrir au public
+			r.Get("/calradia/users", s.handleAdminCalradiaUsers)         // liste d'accès (users connus + ajouts manuels)
+			r.Post("/calradia/allow", s.handleAdminCalradiaAllow)        // autoriser / retirer un pseudo Discord
 		})
 
 		// --- Routes authentifiées ---

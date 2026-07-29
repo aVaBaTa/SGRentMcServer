@@ -74,6 +74,7 @@ func (s *Server) handleDiscordCallback(w http.ResponseWriter, r *http.Request) {
 		Name:     "token",
 		Value:    jwtToken,
 		Path:     "/",
+		Domain:   s.cfg.CookieDomain, // .vbt-prog.com → session partagée entre sous-domaines
 		HttpOnly: true,
 		Secure:   s.cfg.Env == "production",
 		MaxAge:   int((7 * 24 * time.Hour).Seconds()),
@@ -85,6 +86,15 @@ func (s *Server) handleDiscordCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:    "token",
+		Value:   "",
+		Path:    "/",
+		Domain:  s.cfg.CookieDomain,
+		MaxAge:  -1,
+		Expires: time.Unix(0, 0),
+	})
+	// Purge aussi l'ancien cookie host-only (sessions posées avant COOKIE_DOMAIN).
 	http.SetCookie(w, &http.Cookie{
 		Name:    "token",
 		Value:   "",

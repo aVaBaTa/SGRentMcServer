@@ -60,6 +60,10 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN}
       # Fichiers de jeu pré-téléchargés (Hytale) seedés dans chaque volume avant le start.
       SEED_DIR: /seeds
+      # Session partagée entre sous-domaines (gate download calradiacoop).
+      COOKIE_DOMAIN: .vbt-prog.com
+      # Release publique Calradia-Coop (avant : admin + early-access approuvés).
+      CALRADIA_RELEASE_AT: "2026-07-17T00:00:00-04:00"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./secrets/ssh:/etc/sgrent-ssh:ro

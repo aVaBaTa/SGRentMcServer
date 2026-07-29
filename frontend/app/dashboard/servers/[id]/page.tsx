@@ -23,6 +23,7 @@ interface GameServer {
   ram_mb: number;
   cpu_cores: number;
   port: number;
+  access_key?: string; // Calradia-Coop : clé d'accès de l'instance (à partager avec ses amis)
 }
 
 interface ModHit {
@@ -662,6 +663,13 @@ export default function ServerPage() {
                 ? `${server.subdomain}.servers.vbt-prog.com:${server.port}`
                 : `${process.env.NEXT_PUBLIC_SERVER_HOST ?? "24.157.140.226"}:${server.port}`}
             </code>
+            {server.game === "calradia-coop" && server.access_key && (
+              <>
+                <div className="text-zinc-400 mt-2">{t.srv.accessKey}</div>
+                <code className="font-mono text-amber-300">{server.access_key}</code>
+                <div className="text-xs text-zinc-500">{t.srv.accessKeyHint(`${process.env.NEXT_PUBLIC_SERVER_HOST ?? "24.157.140.226"}:${server.port}#${server.access_key}`)}</div>
+              </>
+            )}
             <div className="text-zinc-500 mt-2">
               {t.dash.plan} <span className="text-zinc-300 capitalize">{server.plan}</span>
               {" · "}{server.ram_mb / 1024} GB RAM

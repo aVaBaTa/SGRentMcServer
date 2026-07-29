@@ -86,3 +86,30 @@ func (c *AdminClient) Feedback(ctx context.Context) (int, []byte, error) {
 func (c *AdminClient) PageViews(ctx context.Context) (int, []byte, error) {
 	return c.do(ctx, http.MethodGet, "/api/v1/admin/pageviews", nil)
 }
+
+// Calradia-Coop : candidatures d'accès anticipé (onglet Calradia du panel).
+func (c *AdminClient) CalradiaList(ctx context.Context) (int, []byte, error) {
+	return c.do(ctx, http.MethodGet, "/api/v1/admin/calradia/early-access", nil)
+}
+
+func (c *AdminClient) CalradiaDecide(ctx context.Context, id string, body []byte) (int, []byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/admin/calradia/early-access/"+id+"/status", body)
+}
+
+// Verrou de sortie : date annoncée + interrupteur d'ouverture publique.
+func (c *AdminClient) CalradiaGetRelease(ctx context.Context) (int, []byte, error) {
+	return c.do(ctx, http.MethodGet, "/api/v1/admin/calradia/release", nil)
+}
+
+func (c *AdminClient) CalradiaSetRelease(ctx context.Context, body []byte) (int, []byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/admin/calradia/release", body)
+}
+
+// Liste d'accès au téléchargement : utilisateurs connus + ajouts manuels.
+func (c *AdminClient) CalradiaUsers(ctx context.Context) (int, []byte, error) {
+	return c.do(ctx, http.MethodGet, "/api/v1/admin/calradia/users", nil)
+}
+
+func (c *AdminClient) CalradiaAllow(ctx context.Context, body []byte) (int, []byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/admin/calradia/allow", body)
+}

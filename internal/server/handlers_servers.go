@@ -187,6 +187,11 @@ func (s *Server) buildSpec(gs *servers.GameServer, gameDef servers.GameDef, plan
 	if s.seedReady(gameDef) {
 		spec.EnvVars = append(spec.EnvVars, "AUTO_DOWNLOAD=false", "SKIP_DOWNLOAD=true")
 	}
+	// Calradia-Coop : chaque instance louée est protégée par sa clé d'accès,
+	// vérifiée au Hello par le serveur (affichée au proprio dans le panel).
+	if gs.Game == "calradia-coop" {
+		spec.EnvVars = append(spec.EnvVars, "CALRADIA_ACCESS_KEY="+s.calradiaAccessKey(gs.ID))
+	}
 	return spec
 }
 
@@ -298,6 +303,7 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []*servers.GameServer{}
 	}
+	s.fillCalradiaAccessKey(list...)
 	respond(w, http.StatusOK, list)
 }
 
@@ -310,6 +316,7 @@ func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server not found", http.StatusNotFound)
 		return
 	}
+	s.fillCalradiaAccessKey(gs)
 	respond(w, http.StatusOK, gs)
 }
 

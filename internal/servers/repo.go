@@ -25,6 +25,10 @@ type GameServer struct {
 	CPUCores    float64   `json:"cpu_cores"`
 	Port        int       `json:"port"`
 	CreatedAt   time.Time `json:"created_at"`
+	// AccessKey : clé d'accès par instance (Calradia-Coop). Dérivée de l'ID
+	// serveur + secret — jamais stockée en base ; remplie à la réponse pour le
+	// propriétaire (et injectée dans l'env du container à la création).
+	AccessKey string `json:"access_key,omitempty"`
 }
 
 type Repo struct {

@@ -320,6 +320,60 @@ func main() {
 		relay(w, st, out, err)
 	})
 
+	// --- Calradia-Coop : accès anticipé (onglet Calradia) ---
+	mux.HandleFunc("GET /api/calradia/early-access", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.CalradiaList(ctx)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("POST /api/calradia/early-access/{id}/status", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<12))
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.CalradiaDecide(ctx, r.PathValue("id"), body)
+		relay(w, st, out, err)
+	})
+
+	// Verrou de sortie : date annoncée (informative) + ouverture publique explicite.
+	mux.HandleFunc("GET /api/calradia/release", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.CalradiaGetRelease(ctx)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("POST /api/calradia/release", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<12))
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.CalradiaSetRelease(ctx, body)
+		relay(w, st, out, err)
+	})
+
+	// Liste d'accès au téléchargement (utilisateurs Discord connus + ajouts manuels).
+	mux.HandleFunc("GET /api/calradia/users", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.CalradiaUsers(ctx)
+		relay(w, st, out, err)
+	})
+
+	mux.HandleFunc("POST /api/calradia/allow", func(w http.ResponseWriter, r *http.Request) {
+		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<12))
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		st, out, err := admin.CalradiaAllow(ctx, body)
+		relay(w, st, out, err)
+	})
+
 	mux.Handle("GET /", http.FileServer(http.FS(staticFS)))
 	// Sert l'index à la racine
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -79,6 +80,16 @@ type Config struct {
 	// toggle des droits). Vide = endpoints admin désactivés.
 	AdminToken string
 
+	// CookieDomain : attribut Domain du cookie de session JWT. Vide = host-only
+	// (playrena seulement). « .vbt-prog.com » = session visible par les autres
+	// sous-domaines (requis pour le gate de téléchargement calradiacoop).
+	CookieDomain string
+
+	// CalradiaReleaseAt : date de sortie publique du mod Calradia-Coop. Avant :
+	// téléchargement réservé aux AdminUsers + candidatures early-access approuvées.
+	// Après : public. Zéro (parse raté) = toujours restreint.
+	CalradiaReleaseAt time.Time
+
 	Env string
 }
 
@@ -128,8 +139,21 @@ func Load() *Config {
 
 		AdminToken: getEnv("ADMIN_TOKEN", ""),
 
+		CookieDomain:      getEnv("COOKIE_DOMAIN", ""),
+		CalradiaReleaseAt: parseTime(getEnv("CALRADIA_RELEASE_AT", "2026-07-17T00:00:00-04:00")),
+
 		Env: getEnv("ENV", "development"),
 	}
+}
+
+// parseTime parse un timestamp RFC3339 ; zéro si invalide (= resté restreint).
+func parseTime(raw string) time.Time {
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		slog.Warn("invalid time value, using zero", "raw", raw, "err", err)
+		return time.Time{}
+	}
+	return t
 }
 
 // parseList parse "a,b,c" en []string (trim + minuscule, vides ignorés).

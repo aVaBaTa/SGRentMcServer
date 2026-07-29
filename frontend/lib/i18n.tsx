@@ -347,6 +347,8 @@ const fr = {
   },
   srv: {
     connAddress: "Adresse de connexion",
+    accessKey: "Clé d'accès (Calradia-Coop)",
+    accessKeyHint: (ex: string) => `Requise pour rejoindre : dans le mod, entre « ${ex} ». Partage-la seulement avec tes amis.`,
     authTitle: "Autorisation Hytale requise",
     authDesc: "Ton serveur Hytale doit être autorisé avec ton compte Hytale au premier démarrage. Suis les étapes ci-dessous — la page se met à jour toute seule.",
     authStep: "Étape {n} sur 2",
@@ -812,6 +814,8 @@ const en: Dict = {
   },
   srv: {
     connAddress: "Connection address",
+    accessKey: "Access key (Calradia-Coop)",
+    accessKeyHint: (ex: string) => `Required to join: in the mod, enter "${ex}". Only share it with your friends.`,
     authTitle: "Hytale authorization required",
     authDesc: "Your Hytale server must be authorized with your Hytale account on first launch. Follow the steps below — this page updates on its own.",
     authStep: "Step {n} of 2",
