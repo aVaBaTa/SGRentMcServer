@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Swords, Users, Shield, Globe, Zap, RefreshCw } from "lucide-react";
+import { Check, Swords, Users, Shield, Globe, Zap, RefreshCw, Lock } from "lucide-react";
 import {
   useI18n, PLANS, PERIODS, priceFor, fmtMoney, currencyCode, type Period,
 } from "@/lib/i18n";
@@ -85,6 +85,10 @@ export default function CalradiaCoopHosting() {
               {t.calradia.ctaSite}
             </a>
           </div>
+
+          <p className="flex items-start gap-2 text-sm text-zinc-400 max-w-xl rounded-lg bg-rose-500/5 border border-rose-500/20 px-3 py-2">
+            <Lock className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" /> {t.calradia.accessNote}
+          </p>
 
           <PingBadge className="mt-2" />
         </div>

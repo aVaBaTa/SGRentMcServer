@@ -4,11 +4,14 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aVaBaTa/SGRentMcServer/internal/monitor"
@@ -177,7 +180,10 @@ func main() {
 			http.Error(w, "db not configured", http.StatusServiceUnavailable)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+		// 150 s : l'arrêt gracieux des serveurs steamcmd/LinuxGSM (7DTD…) dépasse
+		// largement 40 s — un timeout trop court laissait le container vivant et
+		// la ligne DB en place (500), d'où des orphelins qui squattent leur port.
+		ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
 		defer cancel()
 		id := r.PathValue("id")
 		cid, _, err := monitor.GetServerContainer(ctx, db, id)
@@ -263,7 +269,10 @@ func main() {
 	})
 
 	mux.HandleFunc("GET /api/promo", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		st, out, err := admin.GetPromo(ctx)
@@ -271,7 +280,10 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /api/promo", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
@@ -280,7 +292,10 @@ func main() {
 	})
 
 	mux.HandleFunc("GET /api/games", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		st, out, err := admin.ListGames(ctx)
@@ -288,7 +303,10 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /api/games/{id}/config", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
@@ -297,7 +315,10 @@ func main() {
 	})
 
 	mux.HandleFunc("GET /api/metrics", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		st, out, err := admin.Metrics(ctx)
@@ -305,7 +326,10 @@ func main() {
 	})
 
 	mux.HandleFunc("GET /api/feedback", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		st, out, err := admin.Feedback(ctx)
@@ -313,7 +337,10 @@ func main() {
 	})
 
 	mux.HandleFunc("GET /api/pageviews", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		st, out, err := admin.PageViews(ctx)
@@ -322,7 +349,10 @@ func main() {
 
 	// --- Calradia-Coop : accès anticipé (onglet Calradia) ---
 	mux.HandleFunc("GET /api/calradia/early-access", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		st, out, err := admin.CalradiaList(ctx)
@@ -330,7 +360,10 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /api/calradia/early-access/{id}/status", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<12))
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
@@ -340,7 +373,10 @@ func main() {
 
 	// Verrou de sortie : date annoncée (informative) + ouverture publique explicite.
 	mux.HandleFunc("GET /api/calradia/release", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		st, out, err := admin.CalradiaGetRelease(ctx)
@@ -348,7 +384,10 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /api/calradia/release", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<12))
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
@@ -358,7 +397,10 @@ func main() {
 
 	// Liste d'accès au téléchargement (utilisateurs Discord connus + ajouts manuels).
 	mux.HandleFunc("GET /api/calradia/users", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		st, out, err := admin.CalradiaUsers(ctx)
@@ -366,12 +408,29 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /api/calradia/allow", func(w http.ResponseWriter, r *http.Request) {
-		if admin == nil { http.Error(w, "admin API non configurée", http.StatusServiceUnavailable); return }
+		if admin == nil {
+			http.Error(w, "admin API non configurée", http.StatusServiceUnavailable)
+			return
+		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<12))
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		st, out, err := admin.CalradiaAllow(ctx, body)
 		relay(w, st, out, err)
+	})
+
+	// Versions publiées du mod : le monitor lit le manifeste de la vitrine
+	// (repo Calradia-Coop, servi en bind mount par calradiacoop-web) à travers
+	// HOST_ROOT, et le croise avec les .zip réellement présents sur le disque.
+	calradiaSite := getEnv("CALRADIA_SITE_DIR", hostRoot+"/home/simon/Shared_Projects/2026/Calradia-Coop/site")
+	mux.HandleFunc("GET /api/calradia/versions", func(w http.ResponseWriter, r *http.Request) {
+		out, err := calradiaVersions(calradiaSite)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(out)
 	})
 
 	mux.Handle("GET /", http.FileServer(http.FS(staticFS)))
@@ -394,4 +453,37 @@ func getEnv(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// calradiaVersions lit le manifeste versions.json de la vitrine du mod et
+// complète chaque entrée avec l'état RÉEL du .zip sur disque (présent, taille,
+// date du fichier) — le panel montre ainsi ce qui est vraiment téléchargeable,
+// pas seulement ce que le manifeste annonce.
+func calradiaVersions(siteDir string) (map[string]any, error) {
+	raw, err := os.ReadFile(filepath.Join(siteDir, "versions.json"))
+	if err != nil {
+		return nil, fmt.Errorf("versions.json illisible (%s) : %w", siteDir, err)
+	}
+	var manifest struct {
+		Versions []map[string]any `json:"versions"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return nil, fmt.Errorf("versions.json invalide : %w", err)
+	}
+	for _, v := range manifest.Versions {
+		file, _ := v["file"].(string)
+		if file == "" {
+			v["present"] = false
+			continue
+		}
+		st, err := os.Stat(filepath.Join(siteDir, filepath.FromSlash(strings.TrimPrefix(file, "/"))))
+		if err != nil {
+			v["present"] = false
+			continue
+		}
+		v["present"] = true
+		v["size_bytes"] = st.Size()
+		v["modified_at"] = st.ModTime().UTC().Format(time.RFC3339)
+	}
+	return map[string]any{"site_dir": siteDir, "versions": manifest.Versions}, nil
 }

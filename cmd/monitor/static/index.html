@@ -352,6 +352,29 @@
         </div>
       </div>
 
+      <!-- Versions du mod publiées sur la vitrine (site/versions.json + fichiers réels) -->
+      <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4 mb-4">
+        <div class="flex items-center justify-between gap-3 mb-1">
+          <h3 class="text-sm font-semibold text-zinc-300">Versions de Calradia-Coop</h3>
+          <button onclick="fetchCalVersions()" class="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 hover:bg-zinc-800">Rafraîchir</button>
+        </div>
+        <p class="text-[11px] text-zinc-500 mb-3">Manifeste <code>versions.json</code> de calradiacoop.vbt-prog.com, croisé avec les .zip réellement présents sur le disque.</p>
+        <div class="rounded-lg border border-zinc-800 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs text-zinc-500 border-b border-zinc-800">
+                <th class="px-4 py-2 font-medium">Version</th>
+                <th class="px-4 py-2 font-medium">Date</th>
+                <th class="px-4 py-2 font-medium">Fichier</th>
+                <th class="px-4 py-2 font-medium">Taille</th>
+                <th class="px-4 py-2 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody id="cal-versions"></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Liste d'accès : qui peut télécharger -->
       <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4 mb-6">
         <h3 class="text-sm font-semibold text-zinc-300 mb-1">Liste d'accès au téléchargement</h3>
@@ -453,7 +476,42 @@
       document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab));
       if (tab === 'dashboard') fetchHistory();
       if (tab === 'logs') ensureLogSelection();
-      if (tab === 'calradia') { fetchCalradia(); fetchCalRelease(); fetchCalUsers(); }
+      if (tab === 'calradia') { fetchCalradia(); fetchCalRelease(); fetchCalUsers(); fetchCalVersions(); }
+    }
+
+    // ---------- Calradia-Coop : versions publiées ----------
+    const humanSize = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' Mo'
+      : n >= 1024 ? (n / 1024).toFixed(0) + ' Ko' : n + ' o';
+
+    async function fetchCalVersions() {
+      const tb = document.getElementById('cal-versions');
+      try {
+        const r = await fetch('api/calradia/versions');
+        if (!r.ok) throw new Error(await r.text());
+        const d = await r.json();
+        const list = d.versions || [];
+        if (!list.length) {
+          tb.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-zinc-600">Aucune version dans le manifeste.</td></tr>';
+          return;
+        }
+        tb.innerHTML = list.map(v => {
+          const latest = v.latest
+            ? '<span class="ml-2 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-400">dernière</span>' : '';
+          const file = v.present
+            ? `<span class="font-mono text-xs text-zinc-400">${esc(v.file || '')}</span>`
+            : `<span class="font-mono text-xs text-red-400" title="fichier absent du disque">${esc(v.file || '')} ✗</span>`;
+          const size = v.present ? humanSize(v.size_bytes || 0) : '—';
+          return `<tr class="border-b border-zinc-800/60">
+            <td class="px-4 py-2 text-zinc-200">${esc(v.version || '?')}${latest}</td>
+            <td class="px-4 py-2 text-zinc-500">${esc(v.date || '—')}</td>
+            <td class="px-4 py-2">${file}</td>
+            <td class="px-4 py-2 text-zinc-400">${size}</td>
+            <td class="px-4 py-2 text-zinc-500 max-w-md truncate" title="${esc(v.notes_fr || '')}">${esc(v.notes_fr || '')}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        tb.innerHTML = `<tr><td colspan="5" class="px-4 py-4 text-red-400">Versions indisponibles : ${esc(String(e.message || e))}</td></tr>`;
+      }
     }
 
     // ---------- Calradia-Coop : accès anticipé ----------
@@ -465,7 +523,7 @@
 
     async function fetchCalradia() {
       try {
-        const r = await fetch('/api/calradia/early-access');
+        const r = await fetch('api/calradia/early-access');
         if (!r.ok) throw new Error(await r.text());
         const d = await r.json();
         const apps = d.applications || [];
@@ -501,7 +559,7 @@
     // La date est informative ; seule la case « Ouvrir au public » déverrouille.
     async function fetchCalRelease() {
       try {
-        const r = await fetch('/api/calradia/release');
+        const r = await fetch('api/calradia/release');
         if (!r.ok) throw new Error(await r.text());
         const d = await r.json();
         document.getElementById('cal-public').checked = !!d.public;
@@ -539,7 +597,7 @@
           : 'Activer l\'ouverture publique ? Le téléchargement s\'ouvrira à tous une fois la date atteinte.')) return;
       }
       try {
-        const r = await fetch('/api/calradia/release', {
+        const r = await fetch('api/calradia/release', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ release_at: releaseAt, public: pub }),
@@ -552,7 +610,7 @@
     // ---------- Calradia : liste d'accès ----------
     async function fetchCalUsers() {
       try {
-        const r = await fetch('/api/calradia/users');
+        const r = await fetch('api/calradia/users');
         if (!r.ok) throw new Error(await r.text());
         const users = (await r.json()).users || [];
         document.getElementById('cal-users').innerHTML = users.length ? users.map(u => `
@@ -579,7 +637,7 @@
 
     async function calAllow(username, allowed) {
       try {
-        const r = await fetch('/api/calradia/allow', {
+        const r = await fetch('api/calradia/allow', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, allowed }),

@@ -90,6 +90,20 @@ type Config struct {
 	// Après : public. Zéro (parse raté) = toujours restreint.
 	CalradiaReleaseAt time.Time
 
+	// CalradiaRDV : adresse du rendezvous des codes de session VUE DES
+	// CONTAINERS (« calradia-rendezvous:7778 » sur mc-net), injectée dans
+	// chaque instance louée → le serveur s'y enregistre et obtient son code
+	// CALR-XXXX. Vide = pas de code (le joueur se connecte par IP:port + clé).
+	CalradiaRDV string
+	// CalradiaRDVPublic : la même chose vue DES JOUEURS (« IP-publique:7778 »),
+	// affichée dans le panel. Vide = retombe sur CalradiaRDV.
+	CalradiaRDVPublic string
+	// CalradiaOperatorKey : secret partagé rendezvous ↔ serveurs officiels. Le
+	// rendezvous ne délivre un code qu'aux serveurs qui le présentent, donc
+	// personne d'autre ne peut se faire lister. Ne sort jamais de l'infra :
+	// ni dans le mod distribué, ni dans une réponse API.
+	CalradiaOperatorKey string
+
 	Env string
 }
 
@@ -141,6 +155,10 @@ func Load() *Config {
 
 		CookieDomain:      getEnv("COOKIE_DOMAIN", ""),
 		CalradiaReleaseAt: parseTime(getEnv("CALRADIA_RELEASE_AT", "2026-07-17T00:00:00-04:00")),
+
+		CalradiaRDV:         getEnv("CALRADIA_RDV", ""),
+		CalradiaRDVPublic:   getEnv("CALRADIA_RDV_PUBLIC", ""),
+		CalradiaOperatorKey: getEnv("CALRADIA_OPERATOR_KEY", ""),
 
 		Env: getEnv("ENV", "development"),
 	}

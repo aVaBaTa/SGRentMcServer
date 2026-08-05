@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Server, Plus, Play, Square, RefreshCw, KeyRound, ArrowLeft, Copy, Check, Cpu, MemoryStick, Settings, Sparkles } from "lucide-react";
+import { Server, Plus, Play, Square, RefreshCw, KeyRound, ArrowLeft, Copy, Check, Cpu, MemoryStick, Settings, Sparkles, Lock } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { getGame, gameTheme } from "@/lib/games";
 import { LanguageSwitcher } from "@/components/site-chrome";
@@ -25,6 +25,8 @@ interface GameServer {
 }
 
 const SERVER_HOST = process.env.NEXT_PUBLIC_SERVER_HOST ?? "24.157.140.226";
+// Où candidater quand un jeu en accès restreint refuse la création (Calradia-Coop).
+const EARLY_ACCESS_URL = "https://calradiacoop.vbt-prog.com/download/#early-access";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const VERSIONS = ["LATEST", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.18.2", "1.16.5", "1.12.2", "1.8.9"];
@@ -54,6 +56,10 @@ export default function GameDashboard() {
   const [newLoader, setNewLoader] = useState("paper"); // Minecraft : paper | fabric | forge
   const [error, setError] = useState("");
   const [copiedId, setCopiedId] = useState("");
+  // Jeu en accès restreint (Calradia-Coop) : l'API décide qui peut créer un
+  // serveur (liste d'accès anticipé approuvée dans /admin). "checking" tant que
+  // la réponse n'est pas là — le formulaire reste bloqué par défaut.
+  const [access, setAccess] = useState<"checking" | "allowed" | "denied">(def?.restricted ? "checking" : "allowed");
 
   const metaOf = (s: string) => STATUS_META[s] ?? { dot: "bg-zinc-500", text: "text-zinc-400" };
   const labelOf = (s: string) => t.dash.status[s] ?? s;
@@ -74,6 +80,16 @@ export default function GameDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Accès restreint : on demande à l'API si ce compte est autorisé. Refus par
+  // défaut si la vérification échoue — l'API refuse de toute façon la création.
+  useEffect(() => {
+    if (!def?.restricted) return;
+    fetch(`${API}/api/v1/calradia/early-access/status`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => setAccess(d?.can_create ? "allowed" : "denied"))
+      .catch(() => setAccess("denied"));
+  }, [def?.restricted]);
+
   async function fetchServers() {
     try {
       const res = await fetch(`${API}/api/v1/servers`, { credentials: "include" });
@@ -84,6 +100,7 @@ export default function GameDashboard() {
   }
 
   async function createServer() {
+    if (def?.restricted && access !== "allowed") { setError(t.dash.restrictedNote); return; }
     if (!newName.trim()) { setError(t.dash.errName); return; }
     setCreating(true);
     setError("");
@@ -143,6 +160,30 @@ export default function GameDashboard() {
               </p>
             </div>
 
+            {access !== "allowed" ? (
+              /* Jeu en accès restreint : pas de formulaire tant que le compte
+                 n'est pas approuvé dans /admin. */
+              <div className="w-full max-w-md rounded-2xl border border-rose-500/30 bg-rose-950/20 px-5 py-5 flex flex-col items-center gap-3">
+                <span className="flex items-center gap-2 font-semibold text-rose-300">
+                  <Lock className="w-4 h-4" /> {t.dash.restrictedTitle}
+                </span>
+                {access === "checking" ? (
+                  <p className="text-sm text-zinc-400">{t.dash.restrictedChecking}</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-zinc-400">{t.dash.restrictedNote}</p>
+                    <a
+                      href={EARLY_ACCESS_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`text-sm font-semibold text-black px-5 py-2.5 rounded-xl transition-colors ${theme.btn}`}
+                    >
+                      {t.dash.restrictedCta}
+                    </a>
+                  </>
+                )}
+              </div>
+            ) : (
             <form onSubmit={(e) => { e.preventDefault(); createServer(); }} className="w-full max-w-2xl flex flex-col gap-3">
               <div className="flex flex-col sm:flex-row gap-3">
                 <input
@@ -186,6 +227,7 @@ export default function GameDashboard() {
                 {creating ? t.dash.creating : t.dash.createBtn}
               </button>
             </form>
+            )}
 
             {/* Note d'autorisation Hytale (OAuth au 1er démarrage) */}
             {def.id === "hytale" && (

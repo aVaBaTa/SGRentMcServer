@@ -29,6 +29,12 @@ type GameServer struct {
 	// serveur + secret — jamais stockée en base ; remplie à la réponse pour le
 	// propriétaire (et injectée dans l'env du container à la création).
 	AccessKey string `json:"access_key,omitempty"`
+	// SessionCode / Rendezvous : le code CALR-XXXX publié par l'instance auprès
+	// du rendezvous, et l'adresse de ce rendezvous. Comme AccessKey : calculés à
+	// la réponse (le code est lu dans /data/session-code.txt du container), pas
+	// stockés — ils changent à chaque redémarrage du serveur.
+	SessionCode string `json:"session_code,omitempty"`
+	Rendezvous  string `json:"rendezvous,omitempty"`
 }
 
 type Repo struct {

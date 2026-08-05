@@ -34,7 +34,7 @@ export default function GamesHub() {
               <div className={`h-28 bg-gradient-to-br ${g.accent} relative`}>
                 <div className="absolute inset-0 bg-black/20" />
                 <span className="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full backdrop-blur bg-black/40 text-white">
-                  {isLive ? t.hub.live : t.hub.soon}
+                  {g.restricted ? t.hub.restricted : isLive ? t.hub.live : t.hub.soon}
                 </span>
                 <span className="absolute bottom-3 left-4 text-2xl font-extrabold text-white drop-shadow">{g.name}</span>
               </div>

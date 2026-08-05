@@ -24,6 +24,8 @@ interface GameServer {
   cpu_cores: number;
   port: number;
   access_key?: string; // Calradia-Coop : clé d'accès de l'instance (à partager avec ses amis)
+  session_code?: string; // Calradia-Coop : code CALR-XXXX publié au rendezvous (vide si serveur arrêté)
+  rendezvous?: string; // Calradia-Coop : adresse du rendezvous (hôte:7778)
 }
 
 interface ModHit {
@@ -663,11 +665,33 @@ export default function ServerPage() {
                 ? `${server.subdomain}.servers.vbt-prog.com:${server.port}`
                 : `${process.env.NEXT_PUBLIC_SERVER_HOST ?? "24.157.140.226"}:${server.port}`}
             </code>
-            {server.game === "calradia-coop" && server.access_key && (
+            {server.game === "calradia-coop" && (
               <>
-                <div className="text-zinc-400 mt-2">{t.srv.accessKey}</div>
-                <code className="font-mono text-amber-300">{server.access_key}</code>
-                <div className="text-xs text-zinc-500">{t.srv.accessKeyHint(`${process.env.NEXT_PUBLIC_SERVER_HOST ?? "24.157.140.226"}:${server.port}#${server.access_key}`)}</div>
+                {/* Kit de connexion : ce que le joueur colle dans le jeu. */}
+                {server.rendezvous && (
+                  <>
+                    <div className="text-zinc-400 mt-2">{t.srv.rendezvous}</div>
+                    <code className="font-mono text-rose-300">{server.rendezvous}</code>
+                  </>
+                )}
+                {server.rendezvous && (
+                  <>
+                    <div className="text-zinc-400 mt-2">{t.srv.sessionCode}</div>
+                    {server.session_code
+                      ? <code className="font-mono text-rose-300 text-lg tracking-wider">{server.session_code}</code>
+                      : <span className="text-sm text-zinc-500">{server.status === "running" ? t.srv.sessionCodePending : t.srv.sessionCodeStopped}</span>}
+                  </>
+                )}
+                {server.access_key && (
+                  <>
+                    <div className="text-zinc-400 mt-2">{t.srv.accessKey}</div>
+                    <code className="font-mono text-amber-300">{server.access_key}</code>
+                    <div className="text-xs text-zinc-500">{t.srv.accessKeyHint(`${process.env.NEXT_PUBLIC_SERVER_HOST ?? "24.157.140.226"}:${server.port}#${server.access_key}`)}</div>
+                  </>
+                )}
+                {server.rendezvous && (
+                  <div className="text-xs text-zinc-500">{t.srv.sessionCodeHint}</div>
+                )}
               </>
             )}
             <div className="text-zinc-500 mt-2">

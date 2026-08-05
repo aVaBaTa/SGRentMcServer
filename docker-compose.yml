@@ -64,6 +64,11 @@ services:
       COOKIE_DOMAIN: .vbt-prog.com
       # Release publique Calradia-Coop (avant : admin + early-access approuvés).
       CALRADIA_RELEASE_AT: "2026-07-17T00:00:00-04:00"
+      # Rendezvous des codes de session Calradia-Coop : injecté dans chaque
+      # instance louée (+ la clé opérateur qui prouve un serveur officiel).
+      CALRADIA_RDV: ${CALRADIA_RDV}
+      CALRADIA_RDV_PUBLIC: ${CALRADIA_RDV_PUBLIC}
+      CALRADIA_OPERATOR_KEY: ${CALRADIA_OPERATOR_KEY}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./secrets/ssh:/etc/sgrent-ssh:ro

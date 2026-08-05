@@ -222,6 +222,77 @@ var games = map[string]GameDef{
 		},
 		Env: valheimEnv,
 	},
+	"7dtd": {
+		ID: "7dtd",
+		// LinuxGSM officiel : un seul volume /data (fichiers serveur + saves),
+		// téléchargés au 1er démarrage via steamcmd.
+		Image:        "gameservermanagers/gameserver:sdtd",
+		DataPath:     "/data",
+		UsesMCRouter: false, // UDP brut → IP:port direct
+		MinRAMMb:     8192,  // monde vaste + IA des hordes : 8 Go minimum stable
+		MinCPUCores:  2.0,
+		Ports: func(base int) []PortMapping {
+			// L'image n'expose pas le port en env → le serveur écoute sur ses
+			// défauts (26900-26902) et Docker remappe vers le bloc alloué. La
+			// connexion directe IP:port marche remappée ; seul l'annuaire Steam
+			// annoncerait le port interne (sans importance : accès direct).
+			return []PortMapping{
+				{HostPort: base, Internal: 26900, Proto: "tcp"},     // login/query
+				{HostPort: base, Internal: 26900, Proto: "udp"},     // jeu
+				{HostPort: base + 1, Internal: 26901, Proto: "udp"}, // Steam networking
+				{HostPort: base + 2, Internal: 26902, Proto: "udp"}, // Steam networking
+			}
+		},
+		Env: sdtdEnv,
+	},
+	"project-zomboid": {
+		ID:           "project-zomboid",
+		Image:        "renegademaster/zomboid-dedicated-server:latest",
+		DataPath:     "/home/steam/Zomboid", // config + saves (les fichiers du jeu se re-téléchargent)
+		UsesMCRouter: false,                 // UDP brut → IP:port direct
+		MinRAMMb:     4096,
+		MinCPUCores:  2.0,
+		Ports: func(base int) []PortMapping {
+			// Ports configurés via env (DEFAULT_PORT/UDP_PORT) → hôte == interne,
+			// alignés sur le bloc alloué.
+			return []PortMapping{
+				{HostPort: base, Internal: base, Proto: "udp"},         // jeu
+				{HostPort: base + 1, Internal: base + 1, Proto: "udp"}, // connexions clients
+			}
+		},
+		Env: zomboidEnv,
+	},
+	"palworld": {
+		ID:           "palworld",
+		Image:        "thijsvanloef/palworld-server-docker:latest",
+		DataPath:     "/palworld",
+		UsesMCRouter: false, // UDP brut → IP:port direct
+		MinRAMMb:     8192,  // le serveur mange la RAM avec le temps (16 Go confortable)
+		MinCPUCores:  4.0,
+		Ports: func(base int) []PortMapping {
+			// PORT (env) aligne le port de jeu sur le bloc alloué → hôte == interne.
+			return []PortMapping{{HostPort: base, Internal: base, Proto: "udp"}}
+		},
+		Env: palworldEnv,
+	},
+	"eco": {
+		ID: "eco",
+		// Image officielle Strange Loop Games ; « default » = tag roulant.
+		Image:        "strangeloopgames/eco-game-server:default",
+		DataPath:     "/app/Storage", // monde + saves (les Configs par défaut restent dans l'image)
+		UsesMCRouter: false,          // UDP brut → IP:port direct
+		MinRAMMb:     4096,
+		MinCPUCores:  2.0,
+		Ports: func(base int) []PortMapping {
+			// Pas de config de port en env → défauts du serveur (3000/udp jeu,
+			// 3001/tcp interface web), remappés vers le bloc alloué.
+			return []PortMapping{
+				{HostPort: base, Internal: 3000, Proto: "udp"},     // jeu
+				{HostPort: base + 1, Internal: 3001, Proto: "tcp"}, // interface web
+			}
+		},
+		Env: ecoEnv,
+	},
 	"calradia-coop": {
 		ID: "calradia-coop",
 		// Image buildée LOCALEMENT sur xe80dell depuis le repo privé Calradia-Coop
@@ -370,6 +441,66 @@ func valheimEnv(_ Plan, _, _, _ string, base int) []string {
 		"SERVER_PASS=playrena",
 		"SERVER_PUBLIC=1",
 	}
+}
+
+// sdtdEnv : config pour l'image LinuxGSM (gameservermanagers/gameserver:sdtd).
+// LinuxGSM se configure surtout par fichiers ; l'env sert au user mapping. Les
+// ports restent les défauts du jeu (remappés par Docker, cf. Ports).
+func sdtdEnv(_ Plan, _, _, _ string, _ int) []string {
+	return []string{
+		"UID=1000",
+		"GID=1000",
+	}
+}
+
+// zomboidEnv : config pour l'image renegademaster/zomboid-dedicated-server.
+// Ports alignés sur le bloc alloué via env. MAX_RAM = tas JVM : la RAM du plan,
+// mais jamais sous 3 Go — le container est de toute façon relevé au plancher du
+// jeu (4 Go), et un tas d'1 Go (plan free) part en OutOfMemoryError au premier
+// chargement de Knox County. La limite du container garde une marge (container.go).
+// Mot de passe admin dérivé plus tard si on expose la console — défaut sûr en attendant.
+func zomboidEnv(plan Plan, _, _, _ string, base int) []string {
+	heapMb := plan.RAMMb
+	if heapMb < 3072 {
+		heapMb = 3072
+	}
+	env := []string{
+		fmt.Sprintf("DEFAULT_PORT=%d", base),
+		fmt.Sprintf("UDP_PORT=%d", base+1),
+		fmt.Sprintf("MAX_RAM=%dm", heapMb),
+		"SERVER_NAME=Playrena Zomboid",
+		"ADMIN_USERNAME=playrena_admin",
+		"ADMIN_PASSWORD=playrena-admin",
+	}
+	if plan.MaxSlots > 0 {
+		env = append(env, fmt.Sprintf("MAX_PLAYERS=%d", plan.MaxSlots))
+	}
+	return env
+}
+
+// palworldEnv : config pour l'image thijsvanloef/palworld-server-docker.
+// PORT (env) aligne le port de jeu sur le bloc alloué. Palworld plafonne à
+// 32 joueurs. COMMUNITY=false : pas de listing public, on rejoint par IP:port.
+func palworldEnv(plan Plan, _, _, _ string, base int) []string {
+	players := plan.MaxSlots
+	if players <= 0 || players > 32 {
+		players = 32
+	}
+	return []string{
+		fmt.Sprintf("PORT=%d", base),
+		fmt.Sprintf("PLAYERS=%d", players),
+		"SERVER_NAME=Playrena Palworld",
+		"COMMUNITY=false",
+		"PUID=1000",
+		"PGID=1000",
+	}
+}
+
+// ecoEnv : config pour l'image officielle strangeloopgames/eco-game-server.
+// Eco se configure par fichiers (Configs/*.eco) — pas d'env de port ; les
+// défauts (3000/3001) sont remappés par Docker. Rien à injecter pour l'instant.
+func ecoEnv(_ Plan, _, _, _ string, _ int) []string {
+	return nil
 }
 
 // calradiaEnv : config pour l'image locale calradia-server (mod Calradia-Coop,

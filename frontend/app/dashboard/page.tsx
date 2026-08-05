@@ -115,7 +115,7 @@ export default function DashboardHub() {
                 <div className="p-4 flex flex-col gap-1 flex-1">
                   <div className="font-semibold">{g.name}</div>
                   <div className="mt-auto flex items-center justify-between text-xs">
-                    <span className={live ? "text-green-400" : "text-zinc-500"}>{live ? t.hub.live : t.hub.soon}</span>
+                    <span className={g.restricted ? "text-rose-300" : live ? "text-green-400" : "text-zinc-500"}>{g.restricted ? t.hub.restricted : live ? t.hub.live : t.hub.soon}</span>
                     {live && <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all" />}
                   </div>
                 </div>

@@ -34,6 +34,17 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Calradia-Coop : le mod est en accès restreint → la création d'un serveur est
+	// réservée aux pseudos autorisés dans /admin (liste d'accès anticipé), aux
+	// admins, ou à tout le monde une fois l'ouverture publique activée. Même règle
+	// que le téléchargement du mod (cf. calradiaAllowed) : inutile de louer un
+	// monde qu'on ne pourrait pas rejoindre.
+	if strings.EqualFold(strings.TrimSpace(req.Game), "calradia-coop") &&
+		!s.calradiaAllowed(r.Context(), claims.Username) {
+		http.Error(w, "calradia-coop is in restricted access: approved early-access testers only", http.StatusForbidden)
+		return
+	}
+
 	// Droit "création illimitée" : seul un user qui a ce droit peut créer
 	// directement un serveur sur un plan PAYANT sans paiement. Sinon le plan
 	// demandé est ramené à "free" (le passage payant se fait ensuite via le
@@ -188,9 +199,23 @@ func (s *Server) buildSpec(gs *servers.GameServer, gameDef servers.GameDef, plan
 		spec.EnvVars = append(spec.EnvVars, "AUTO_DOWNLOAD=false", "SKIP_DOWNLOAD=true")
 	}
 	// Calradia-Coop : chaque instance louée est protégée par sa clé d'accès,
-	// vérifiée au Hello par le serveur (affichée au proprio dans le panel).
+	// vérifiée à la connexion par le serveur (affichée au proprio dans le panel).
+	// Avec CALRADIA_RDV, elle s'enregistre en plus auprès du rendezvous et publie
+	// son code CALR-XXXX dans /data/session-code.txt — la clé opérateur prouve que
+	// c'est bien un serveur Playrena (le rendezvous ignore les autres).
 	if gs.Game == "calradia-coop" {
 		spec.EnvVars = append(spec.EnvVars, "CALRADIA_ACCESS_KEY="+s.calradiaAccessKey(gs.ID))
+		if s.cfg.CalradiaRDV != "" {
+			spec.EnvVars = append(spec.EnvVars,
+				"CALRADIA_RDV="+s.cfg.CalradiaRDV,
+				// Le publish Docker garde le même numéro à l'extérieur, mais on
+				// l'annonce explicitement : le rendezvous doit donner aux joueurs
+				// le port PUBLIC, pas celui vu dans le container.
+				fmt.Sprintf("CALRADIA_PUBLIC_PORT=%d", gs.Port))
+		}
+		if s.cfg.CalradiaOperatorKey != "" {
+			spec.EnvVars = append(spec.EnvVars, "CALRADIA_OPERATOR_KEY="+s.cfg.CalradiaOperatorKey)
+		}
 	}
 	return spec
 }
@@ -317,6 +342,9 @@ func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.fillCalradiaAccessKey(gs)
+	// Kit de connexion complet sur la fiche d'un serveur (lecture d'un fichier
+	// dans le container) — pas sur la liste, qui est pollée toutes les 3 s.
+	s.fillCalradiaSession(r.Context(), gs)
 	respond(w, http.StatusOK, gs)
 }
 

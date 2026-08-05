@@ -39,6 +39,52 @@ func (s *Server) fillCalradiaAccessKey(list ...*servers.GameServer) {
 	}
 }
 
+// fillCalradiaSession : renseigne le kit de connexion « code de session » d'une
+// instance Calradia-Coop — l'adresse du rendezvous et le code CALR-XXXX que le
+// serveur y a publié (il l'écrit dans /data/session-code.txt en s'enregistrant).
+// Silencieux : un serveur arrêté, sans rendezvous configuré ou pas encore
+// enregistré laisse simplement les champs vides (le panel retombe sur IP:port).
+func (s *Server) fillCalradiaSession(ctx context.Context, gs *servers.GameServer) {
+	if gs == nil || gs.Game != "calradia-coop" || s.cfg.CalradiaRDV == "" {
+		return
+	}
+	// Adresse montrée au joueur : la publique si distincte de l'interne.
+	gs.Rendezvous = s.cfg.CalradiaRDVPublic
+	if gs.Rendezvous == "" {
+		gs.Rendezvous = s.cfg.CalradiaRDV
+	}
+	if gs.ContainerID == "" || gs.Status != "running" {
+		return
+	}
+	node, err := s.orch.NodeByID(gs.Node)
+	if err != nil {
+		return
+	}
+	readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	data, _, err := node.ReadFile(readCtx, gs.ContainerID, "session-code.txt", 64)
+	if err != nil {
+		return
+	}
+	gs.SessionCode = sanitizeSessionCode(string(data))
+}
+
+// sanitizeSessionCode : le code vient d'un fichier écrit dans le container, donc
+// on ne renvoie que ce qui ressemble vraiment à un code (A-Z, 0-9 et tirets,
+// ≤ 24 caractères) plutôt que de relayer un contenu arbitraire au panel.
+func sanitizeSessionCode(raw string) string {
+	code := strings.ToUpper(strings.TrimSpace(raw))
+	if code == "" || len(code) > 24 {
+		return ""
+	}
+	for _, r := range code {
+		if !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '-' {
+			return ""
+		}
+	}
+	return code
+}
+
 // isAdminUser : le pseudo appartient-il à AdminUsers (insensible à la casse) ?
 func (s *Server) isAdminUser(username string) bool {
 	for _, a := range s.cfg.AdminUsers {
@@ -58,24 +104,32 @@ func (s *Server) calradiaReleased(ctx context.Context) bool {
 }
 
 // calradiaApproved : le pseudo a-t-il une candidature early-access approuvée ?
-func (s *Server) calradiaApproved(r *http.Request, username string) bool {
+func (s *Server) calradiaApproved(ctx context.Context, username string) bool {
 	var ok bool
-	err := s.db.QueryRow(r.Context(),
+	err := s.db.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM calradia_early_access
 		  WHERE lower(discord_username) = lower($1) AND status = 'approved')`,
 		username).Scan(&ok)
 	return err == nil && ok
 }
 
+// calradiaAllowed : ce pseudo a-t-il droit à Calradia-Coop (téléchargement du mod
+// ET création d'un serveur) ? Une seule règle pour les deux : ouverture publique
+// activée, OU admin, OU candidature approuvée dans /admin. Tant que le mod est en
+// accès restreint, personne d'autre ne peut louer un serveur qu'il ne pourrait de
+// toute façon pas rejoindre.
+func (s *Server) calradiaAllowed(ctx context.Context, username string) bool {
+	if s.calradiaReleased(ctx) {
+		return true
+	}
+	return username != "" && (s.isAdminUser(username) || s.calradiaApproved(ctx, username))
+}
+
 // handleCalradiaDownloadAuth : GET /api/v1/calradia/download-auth — cible de
 // l'auth_request nginx qui garde /files/ sur calradiacoop.vbt-prog.com.
 // 200 si : release publique passée, OU session admin, OU candidature approuvée.
 func (s *Server) handleCalradiaDownloadAuth(w http.ResponseWriter, r *http.Request) {
-	if s.calradiaReleased(r.Context()) {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if u := s.extractUsername(r); u != "" && (s.isAdminUser(u) || s.calradiaApproved(r, u)) {
+	if s.calradiaAllowed(r.Context(), s.extractUsername(r)) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -127,6 +181,7 @@ func (s *Server) handleCalradiaStatus(w http.ResponseWriter, r *http.Request) {
 		Username    string `json:"username,omitempty"`
 		Application string `json:"application,omitempty"` // pending | approved | rejected
 		CanDownload bool   `json:"can_download"`
+		CanCreate   bool   `json:"can_create"` // même règle : louer un serveur Calradia-Coop
 	}{
 		Released:  rel.Released(),
 		ReleaseAt: rel.ReleaseAt,
@@ -140,8 +195,11 @@ func (s *Server) handleCalradiaStatus(w http.ResponseWriter, r *http.Request) {
 			out.Application = status
 		}
 	}
+	// Même règle que calradiaAllowed (candidature déjà chargée ci-dessus, donc
+	// recalculée ici plutôt que re-interrogée).
 	out.CanDownload = out.Released ||
 		(username != "" && (s.isAdminUser(username) || out.Application == "approved"))
+	out.CanCreate = out.CanDownload
 	respond(w, http.StatusOK, out)
 }
 
