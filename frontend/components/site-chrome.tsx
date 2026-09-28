@@ -170,6 +170,7 @@ export function SiteNav() {
       <div className="flex items-center gap-4 sm:gap-6 text-sm text-zinc-400">
         <a href="/games" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.navGames}</a>
         <a href="/mods" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.mods}</a>
+        <a href="/telecharger" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.download}</a>
         <a href="/blog" className="hidden sm:inline hover:text-zinc-100 transition-colors">{t.nav.blog}</a>
         <LanguageSwitcher />
         <AuthButton />

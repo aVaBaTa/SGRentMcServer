@@ -175,6 +175,32 @@ docker rm -f mcserver-frontend && docker run -d --name mcserver-frontend \
 sudo ufw allow 25566:26565/udp && sudo ufw allow 25566:26565/tcp
 ```
 
+## ✅ Application cliente `/telecharger` (2026-09-28)
+
+Le visionneur **SGCoreLink** (jeu en streaming : la machine Playrena s'affiche sur le PC
+du client, 1080p60, souris/clavier/son) se télécharge sur
+**`https://playrena.vbt-prog.com/telecharger`**, derrière la connexion Discord.
+
+- **Qui** : `ADMIN_USERS` seulement (le proprio `avabata`) pour l'instant — même
+  helper `isAdminUser` que le verrou Calradia, sans liste early-access. Ouvrir à
+  d'autres = ajouter le pseudo à `ADMIN_USERS` (compose) ou étendre `appAllowed`.
+- **Quoi** : la **dernière release GitHub** du dépôt privé `aVaBaTa/SGCoreLink`
+  (asset `*-win64.zip`), relayée par l'API — aucune copie de fichier sur xe80, une
+  nouvelle release SGCoreLink est servie sans redéployer Playrena.
+- **API** (`internal/server/handlers_app.go`) : `GET /api/v1/app/status` (connecté ?
+  autorisé ? release) et `GET /api/v1/app/download` (401/403/zip). `Cache-Control:
+  private, no-store` obligatoire (leçon Calradia : Cloudflare cachait le zip).
+  Le jeton part vers `api.github.com` seulement, jamais vers l'hôte de stockage
+  de la redirection. Tests : `go test ./internal/server/ -run 'TestApp|TestDiscordLogin'`.
+- **Login** : `/auth/discord?next=/telecharger` ramène sur la page (chemin relatif
+  uniquement, cookie `oauth_next` 5 min) au lieu du dashboard.
+- **Nouveau secret** : `GITHUB_TOKEN` (PAT scope `repo`, le même que le conteneur
+  `portfolio` : `docker exec portfolio sh -c 'echo $GITHUB_TOKEN'`) à ajouter dans
+  `.env` avant `docker compose up -d --build api`. Sans lui la page affiche
+  « téléchargement indisponible : GITHUB_TOKEN manquant », rien d'autre ne casse.
+- **Portfolio** : lien « Playrena App » dans le menu Écosystème → cette page ;
+  SGCoreLink retiré de la liste publique des projets (sinon le verrou ne servirait à rien).
+
 ## Pièges / règles
 
 - **Jamais valider en localhost** ; toujours via le domaine public **`https://playrena.vbt-prog.com`** (ex-`mcserver.vbt-prog.com`, encore actif en parallèle).

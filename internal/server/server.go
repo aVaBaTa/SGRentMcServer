@@ -78,6 +78,10 @@ func (s *Server) mountRoutes() {
 		r.Post("/feedback", s.handleFeedback)      // sondage visiteurs (widget « Ton avis ? »)
 		r.Post("/track", s.handleTrack)            // beacon : page visitée (analytics /admin)
 		r.Get("/admin-session", s.handleAdminSession) // cible auth_request nginx : proprio connecté → /admin sans Basic Auth
+		// --- Application cliente Playrena (visionneur SGCoreLink) : /telecharger ---
+		// Publiques : elles lisent la session elles-mêmes (401/403 propres sans JWT).
+		r.Get("/app/status", s.handleAppStatus)     // connecté ? autorisé ? release dispo
+		r.Get("/app/download", s.handleAppDownload) // l'archive, réservée aux AdminUsers
 		r.Post("/presence", s.handlePresence)      // heartbeat : « en ligne maintenant » (Redis TTL)
 
 		// --- Calradia-Coop : accès anticipé (site calradiacoop.vbt-prog.com) ---

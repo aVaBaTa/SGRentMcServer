@@ -58,6 +58,8 @@ services:
       INGEST_SECRET: ${INGEST_SECRET}
       # Secret partagé monitor(/admin) ↔ API pour les endpoints admin internes.
       ADMIN_TOKEN: ${ADMIN_TOKEN}
+      # Jeton GitHub (PAT, scope repo) : releases du dépôt privé SGCoreLink → /telecharger
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
       # Fichiers de jeu pré-téléchargés (Hytale) seedés dans chaque volume avant le start.
       SEED_DIR: /seeds
       # Session partagée entre sous-domaines (gate download calradiacoop).

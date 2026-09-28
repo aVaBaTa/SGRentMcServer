@@ -80,6 +80,12 @@ type Config struct {
 	// toggle des droits). Vide = endpoints admin désactivés.
 	AdminToken string
 
+	// GitHubToken : jeton (PAT, scope repo) pour lire les releases du dépôt privé
+	// aVaBaTa/SGCoreLink — l'application cliente distribuée sur /telecharger.
+	// Vide = téléchargement indisponible (page en erreur explicite, rien d'autre
+	// n'est touché).
+	GitHubToken string
+
 	// CookieDomain : attribut Domain du cookie de session JWT. Vide = host-only
 	// (playrena seulement). « .vbt-prog.com » = session visible par les autres
 	// sous-domaines (requis pour le gate de téléchargement calradiacoop).
@@ -152,6 +158,8 @@ func Load() *Config {
 		IngestSecret: getEnv("INGEST_SECRET", ""),
 
 		AdminToken: getEnv("ADMIN_TOKEN", ""),
+
+		GitHubToken: getEnv("GITHUB_TOKEN", ""),
 
 		CookieDomain:      getEnv("COOKIE_DOMAIN", ""),
 		CalradiaReleaseAt: parseTime(getEnv("CALRADIA_RELEASE_AT", "2026-07-17T00:00:00-04:00")),

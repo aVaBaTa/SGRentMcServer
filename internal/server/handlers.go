@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aVaBaTa/SGRentMcServer/internal/auth"
@@ -28,6 +29,20 @@ func (s *Server) handleDiscordLogin(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   300,
 		SameSite: http.SameSiteLaxMode,
 	})
+	// ?next=/telecharger : revenir sur la page d'où vient le login au lieu du
+	// dashboard. Chemin RELATIF seulement (commence par un seul « / ») : jamais
+	// une URL externe, sinon la page de login servirait de redirecteur ouvert.
+	if next := r.URL.Query().Get("next"); strings.HasPrefix(next, "/") && !strings.HasPrefix(next, "//") && len(next) <= 200 {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "oauth_next",
+			Value:    next,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   s.cfg.Env == "production",
+			MaxAge:   300,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
 	url := s.discordOAuth.AuthCodeURL(state, oauth2.AccessTypeOnline)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
@@ -82,7 +97,13 @@ func (s *Server) handleDiscordCallback(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Rediriger vers le dashboard (frontend)
-	http.Redirect(w, r, "/dashboard", http.StatusTemporaryRedirect)
+	// Rediriger vers la page d'origine (?next= au login, ex. /telecharger), sinon le dashboard
+	target := "/dashboard"
+	if c, err := r.Cookie("oauth_next"); err == nil && strings.HasPrefix(c.Value, "/") && !strings.HasPrefix(c.Value, "//") {
+		target = c.Value
+		http.SetCookie(w, &http.Cookie{Name: "oauth_next", MaxAge: -1, Path: "/"})
+	}
+	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
