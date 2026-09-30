@@ -538,7 +538,9 @@ func arkEnv(plan Plan, _, _, _ string, base int) []string {
 	return []string{
 		fmt.Sprintf("GAME_PORT=%d", base),
 		"SERVER_MAP=TheIsland_WP",
-		"SESSION_NAME=Playrena ARK Ascended",
+		// Sans espaces : le nom passe dans la query-string UE (?SessionName=…) et
+		// le boot de validation a montré une troncature au premier espace.
+		"SESSION_NAME=Playrena-ARK",
 		"SERVER_ADMIN_PASSWORD=playrena-admin",
 		fmt.Sprintf("EXTRA_FLAGS=-WinLiveMaxPlayers=%d -NoBattlEye", players),
 	}
