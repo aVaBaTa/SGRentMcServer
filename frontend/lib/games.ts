@@ -21,13 +21,15 @@ export const GAMES: Game[] = [
   { id: "project-zomboid", name: "Project Zomboid", href: "/games/project-zomboid", status: "live", accent: "from-rose-600 to-red-700", minRamGb: 4 },
   { id: "palworld", name: "Palworld", href: "/games/palworld", status: "live", accent: "from-yellow-400 to-amber-500", minRamGb: 8 },
   { id: "eco", name: "Eco", href: "/games/eco", status: "live", accent: "from-green-500 to-lime-600", minRamGb: 4 },
+  // ASA = binaires Windows sous Proton, très gourmand (UE5) → plancher 16 Go,
+  // ~1 serveur à la fois sur xe80dell (même logique assumée que Hytale).
+  { id: "ark", name: "ARK: Survival Ascended", href: "/games/ark", status: "live", accent: "from-fuchsia-500 to-purple-600", minRamGb: 16 },
   // Mod coop exclusif (M&B II: Bannerlord) — serveur privé Playrena, offert au plancher pour le lancement.
   // Le mod n'est pas encore sorti (accès restreint) : la carte n'annonce pas « Disponible ».
   { id: "calradia-coop", name: "Mount & Blade II : Calradia-Coop", href: "/games/calradia-coop", status: "live", accent: "from-rose-600 to-red-800", minRamGb: 1, freeAtFloor: true, restricted: true },
 
   // --- Bientôt (jeux populaires avec serveur dédié — href "#" tant qu'il n'y a pas de page) ---
   { id: "rust", name: "Rust", href: "/games/rust", status: "soon", accent: "from-red-500 to-orange-600" },
-  { id: "ark", name: "ARK: Survival", href: "/games/ark", status: "soon", accent: "from-fuchsia-500 to-purple-600" },
   { id: "terraria", name: "Terraria", href: "#", status: "soon", accent: "from-emerald-500 to-teal-600" },
   { id: "v-rising", name: "V Rising", href: "#", status: "soon", accent: "from-purple-700 to-fuchsia-800" },
   { id: "enshrouded", name: "Enshrouded", href: "#", status: "soon", accent: "from-violet-500 to-purple-700" },

@@ -293,6 +293,28 @@ var games = map[string]GameDef{
 		},
 		Env: ecoEnv,
 	},
+	"ark": {
+		ID: "ark",
+		// ARK: Survival Ascended — binaires Windows via GE Proton (pas de serveur
+		// Linux natif). Image Debian 12 + steamcmd, user steam (UID 10000).
+		Image: "sknnr/ark-ascended-server:latest",
+		// On monte TOUT /home/steam/ark (pas seulement ShooterGame/Saved comme le
+		// README de l'image) : les fichiers du jeu font ~35 Go téléchargés via
+		// steamcmd au 1er boot — persister l'installation évite de tout re-télécharger
+		// à chaque recréation (changement de plan, modpack…). Les saves vivent
+		// dedans (ShooterGame/Saved).
+		DataPath:     "/home/steam/ark",
+		UsesMCRouter: false, // UDP brut → IP:port direct
+		MinRAMMb:     16384, // UE5 : 11-16 Go réels en jeu → ~1 serveur à la fois sur xe80dell
+		MinCPUCores:  4.0,
+		Ports: func(base int) []PortMapping {
+			// Un seul port UDP à exposer (GAME_PORT) : le query port n'existe plus
+			// en ASA et le RCON reste interne (non publié : mot de passe admin
+			// par défaut → l'exposer permettrait d'administrer le serveur).
+			return []PortMapping{{HostPort: base, Internal: base, Proto: "udp"}}
+		},
+		Env: arkEnv,
+	},
 	"calradia-coop": {
 		ID: "calradia-coop",
 		// Image buildée LOCALEMENT sur xe80dell depuis le repo privé Calradia-Coop
@@ -501,6 +523,25 @@ func palworldEnv(plan Plan, _, _, _ string, base int) []string {
 // défauts (3000/3001) sont remappés par Docker. Rien à injecter pour l'instant.
 func ecoEnv(_ Plan, _, _, _ string, _ int) []string {
 	return nil
+}
+
+// arkEnv : config pour l'image sknnr/ark-ascended-server (ASA sous GE Proton).
+// GAME_PORT aligne le port de jeu sur le bloc alloué (hôte == interne). Le cap
+// joueurs passe par le flag -WinLiveMaxPlayers (le MaxPlayers des .ini est
+// cassé en ASA) ; -NoBattlEye : BattlEye sous Proton est source de kicks/crashs
+// et le serveur est joint par IP directe (pas de listing officiel).
+func arkEnv(plan Plan, _, _, _ string, base int) []string {
+	players := plan.MaxSlots
+	if players <= 0 || players > 70 {
+		players = 70 // défaut officiel des serveurs ASA
+	}
+	return []string{
+		fmt.Sprintf("GAME_PORT=%d", base),
+		"SERVER_MAP=TheIsland_WP",
+		"SESSION_NAME=Playrena ARK Ascended",
+		"SERVER_ADMIN_PASSWORD=playrena-admin",
+		fmt.Sprintf("EXTRA_FLAGS=-WinLiveMaxPlayers=%d -NoBattlEye", players),
+	}
 }
 
 // calradiaEnv : config pour l'image locale calradia-server (mod Calradia-Coop,
