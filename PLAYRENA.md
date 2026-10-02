@@ -840,7 +840,16 @@ bot Discord ; (2) **NAT routeur** UDP+TCP `25566-26565 → 10.0.0.2` (connexion 
 - UPnP : la box ne répond plus (SSDP muet, descripteur 49152 refusé, cron refresh en échec) → les
   mappings Calradia 7777/7778 sont probablement tombés aussi. Règle manuelle routeur = la vraie solution.
 
-## ⚠️ Blocage connu : connectivité des serveurs UDP (Satisfactory/Hytale)
+## ✅ Connectivité UDP des jeux — DÉBLOQUÉE (2026-10-02)
+
+Simon a posé la règle routeur (port range forwarding UDP+TCP `25566-26565` → `10.0.0.2`) et les
+règles `ufw` sur xe80dell. **Vérifié** : 20 datagrammes UDP envoyés depuis xe90 vers `10.0.0.2:25566`
+ET vers l'IP publique `24.157.140.226:25566` (hairpin NAT) → 20/20 reçus par le socket du container
+ARK (`/proc/net/snmp` Udp InDatagrams). Satisfactory/Hytale/Valheim/ARK… joignables de l'extérieur
+sans action par serveur. Le cron `upnp-refresh.sh` (UPnP mort sur la box) n'est plus nécessaire
+pour cette plage.
+
+## ⚠️ (Historique) Blocage : connectivité des serveurs UDP (Satisfactory/Hytale)
 
 Le container Satisfactory **fonctionne** (jeu démarré, ports bindés sur l'hôte), mais les
 joueurs ne peuvent pas se connecter tant que le **pare-feu UDP n'est pas ouvert** (le MC
