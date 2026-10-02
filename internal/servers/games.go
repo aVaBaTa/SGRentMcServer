@@ -544,6 +544,10 @@ func arkEnv(plan Plan, _, _, _ string, base int) []string {
 		// le boot de validation a montré une troncature au premier espace.
 		"SESSION_NAME=Playrena-ARK",
 		"SERVER_ADMIN_PASSWORD=playrena-admin",
+		// ?listen : présent dans la commande officielle Wildcard et l'image
+		// mschnitzer, absent de l'image sknnr — ajouté via EXTRA_SETTINGS (collé à
+		// la query-string) pour l'enregistrement de session EOS (liste non-officielle).
+		"EXTRA_SETTINGS=?listen",
 		fmt.Sprintf("EXTRA_FLAGS=-WinLiveMaxPlayers=%d -NoBattlEye -culture=en", players),
 	}
 }
