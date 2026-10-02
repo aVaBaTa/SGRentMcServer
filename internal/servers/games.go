@@ -528,8 +528,10 @@ func ecoEnv(_ Plan, _, _, _ string, _ int) []string {
 // arkEnv : config pour l'image sknnr/ark-ascended-server (ASA sous GE Proton).
 // GAME_PORT aligne le port de jeu sur le bloc alloué (hôte == interne). Le cap
 // joueurs passe par le flag -WinLiveMaxPlayers (le MaxPlayers des .ini est
-// cassé en ASA) ; -NoBattlEye : BattlEye sous Proton est source de kicks/crashs
-// et le serveur est joint par IP directe (pas de listing officiel).
+// cassé en ASA) ; -NoBattlEye : BattlEye sous Proton est source de kicks/crashs.
+// -culture=en : sans culture définie, le serveur ne s'enregistre pas dans la
+// liste non-officielle EOS (cause n°1 des serveurs ASA « invisibles ») ; l'ini
+// généré par l'image ne la pose pas, le flag UE équivaut à [Internationalization].
 func arkEnv(plan Plan, _, _, _ string, base int) []string {
 	players := plan.MaxSlots
 	if players <= 0 || players > 70 {
@@ -542,7 +544,7 @@ func arkEnv(plan Plan, _, _, _ string, base int) []string {
 		// le boot de validation a montré une troncature au premier espace.
 		"SESSION_NAME=Playrena-ARK",
 		"SERVER_ADMIN_PASSWORD=playrena-admin",
-		fmt.Sprintf("EXTRA_FLAGS=-WinLiveMaxPlayers=%d -NoBattlEye", players),
+		fmt.Sprintf("EXTRA_FLAGS=-WinLiveMaxPlayers=%d -NoBattlEye -culture=en", players),
 	}
 }
 
