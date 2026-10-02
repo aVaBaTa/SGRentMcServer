@@ -296,8 +296,13 @@ var games = map[string]GameDef{
 	"ark": {
 		ID: "ark",
 		// ARK: Survival Ascended — binaires Windows via GE Proton (pas de serveur
-		// Linux natif). Image Debian 12 + steamcmd, user steam (UID 10000).
-		Image: "sknnr/ark-ascended-server:latest",
+		// Linux natif). Image LOCALE dérivée de sknnr/ark-ascended-server
+		// (docker/images/asa-server/Dockerfile) : Proton 10 + shims Steam +
+		// SteamAppId, sans quoi « Steam Subsystem initialized: FAILED » et le
+		// serveur n'apparaît jamais dans la liste non-officielle (joignable par IP
+		// seulement). Build : `docker build -t playrena-asa-server:latest
+		// docker/images/asa-server` (pullImage a un repli image-locale).
+		Image: "playrena-asa-server:latest",
 		// On monte TOUT /home/steam/ark (pas seulement ShooterGame/Saved comme le
 		// README de l'image) : les fichiers du jeu font ~35 Go téléchargés via
 		// steamcmd au 1er boot — persister l'installation évite de tout re-télécharger
