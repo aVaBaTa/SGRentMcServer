@@ -822,6 +822,24 @@ bot Discord ; (2) **NAT routeur** UDP+TCP `25566-26565 → 10.0.0.2` (connexion 
   - [ ] **Rétention** : la table grossit à chaque navigation (pas de purge auto — ajouter un TTL/cron
     si le volume devient gros). Anonymes inclus (« anonyme »).
 
+## ✅ Session 2026-10-02 — Réglages de jeu + plan admin sans paiement
+
+- **Réglages de jeu éditables par le client** (onglet Paramètres → « Réglages du jeu ») :
+  `internal/servers/settings.go` = défs par jeu (`SettingDef` : clé, env surchargée, type
+  text/password/select, options, pattern). Couverts : **ARK** (carte, nom de session sans espaces,
+  mdp d'accès, mdp admin), **Valheim** (nom, monde, mdp ≥ 5), **Palworld** (nom), **Zomboid** (nom,
+  mdp admin), **Minecraft** (MOTD). Stockage `game_servers.settings` JSONB (migration **009**,
+  appliquée live). Appliqué en **surcharge d'env** dans `buildSpec` (ajouté APRÈS l'env de base →
+  dernière occurrence gagne, zéro changement aux env builders). `GET|POST /servers/{id}/settings` ;
+  appliquer = `recreateServer` (monde conservé). Jeu sans défs → carte masquée. Tests unitaires
+  (`settings_test.go`). Pour ajouter un réglage : une ligne dans `gameSettings` + libellé i18n
+  `srv.setLabels`.
+- **🔒 Trou fermé** : `POST /servers/{id}/upgrade` acceptait un plan payant **sans paiement** (le
+  PayPal n'était qu'un gate frontend). Désormais 402 si plan payant, **sauf** compte
+  `unlimited_create` (avabata) → frontend : bouton « Appliquer » direct à la place de PayPal.
+- UPnP : la box ne répond plus (SSDP muet, descripteur 49152 refusé, cron refresh en échec) → les
+  mappings Calradia 7777/7778 sont probablement tombés aussi. Règle manuelle routeur = la vraie solution.
+
 ## ⚠️ Blocage connu : connectivité des serveurs UDP (Satisfactory/Hytale)
 
 Le container Satisfactory **fonctionne** (jeu démarré, ports bindés sur l'hôte), mais les

@@ -191,6 +191,9 @@ func (s *Server) buildSpec(gs *servers.GameServer, gameDef servers.GameDef, plan
 		spec.RouterHost = gs.Subdomain + "." + s.cfg.ServersDomain
 		spec.RouterPort = gameDef.RouterPort
 	}
+	// Réglages de jeu du propriétaire (carte, mots de passe… — settings.go) :
+	// appliqués APRÈS l'env de base, la dernière occurrence gagne côté Docker.
+	spec.EnvVars = append(spec.EnvVars, servers.SettingsEnv(gs.Game, gs.Settings)...)
 	// Si les fichiers de jeu pré-téléchargés sont disponibles, on désactive le
 	// téléchargement (et son OAuth) dans le container : le volume sera seedé avant
 	// le start (cf. provisionServer / seedServer). Dernière occurrence = celle qui
@@ -505,6 +508,18 @@ func (s *Server) handleUpgradeServer(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
+	}
+
+	// Un plan payant se paie (le checkout PayPal applique le plan après capture,
+	// cf. handlers_billing) — ce endpoint direct est réservé aux plans gratuits…
+	// sauf pour les comptes unlimited_create (le proprio), qui changent de plan
+	// librement. Sans ce garde-fou, un appel API direct contournait PayPal.
+	if plan.PriceCents > 0 {
+		u, uerr := s.userRepo.GetByID(r.Context(), auth.GetClaims(r).UserID)
+		if uerr != nil || !u.UnlimitedCreate {
+			http.Error(w, "plan payant : paiement requis", http.StatusPaymentRequired)
+			return
+		}
 	}
 
 	// Plancher de ressources par jeu (même logique qu'à la création, override admin inclus) :

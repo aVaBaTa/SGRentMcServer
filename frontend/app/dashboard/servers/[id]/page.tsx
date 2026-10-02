@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight, KeyRound, Copy, Check, Loader2, ExternalLink, AlertTriangle, Globe, Search, Package } from "lucide-react";
+import { ArrowLeft, Play, Square, RefreshCw, Server, ArrowUpCircle, Users, Terminal, SendHorizontal, Shield, Ban, UserMinus, UserPlus, Folder, FileText, Upload, Download, Trash2, FolderPlus, Save, X, ChevronRight, KeyRound, Copy, Check, Loader2, ExternalLink, AlertTriangle, Globe, Search, Package, SlidersHorizontal } from "lucide-react";
 import { useI18n, PLANS as BASE_PLANS, priceFor, fmtMoney } from "@/lib/i18n";
 import { getGame } from "@/lib/games";
 import { LanguageSwitcher } from "@/components/site-chrome";
@@ -86,6 +86,13 @@ export default function ServerPage() {
   const [paypalReady, setPaypalReady] = useState(false);
   const [paypalEnabled, setPaypalEnabled] = useState(false);
   const paypalRef = useRef<HTMLDivElement>(null);
+  // Réglages de jeu (carte, nom, mots de passe… — défs servies par l'API) et
+  // droit unlimited_create (admin) : change de plan payant sans passer par PayPal.
+  interface SettingDef { key: string; type: string; options?: string[]; default: string; max_len: number }
+  const [settingDefs, setSettingDefs] = useState<SettingDef[]>([]);
+  const [settingValues, setSettingValues] = useState<Record<string, string>>({});
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [unlimited, setUnlimited] = useState(false);
 
   const statusMeta = (s: string) => STATUS_META[s] ?? { dot: "bg-zinc-500", text: "text-zinc-400" };
   const statusLabel = (s: string) => t.dash.status[s] ?? s;
@@ -130,6 +137,24 @@ export default function ServerPage() {
   // Plugins Minecraft (dossier /plugins, image Paper)
   const [plugins, setPlugins] = useState<FileEntry[]>([]);
   const [pluginUploading, setPluginUploading] = useState(false);
+
+  // Réglages de jeu du serveur + statut unlimited_create du compte.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [sRes, meRes] = await Promise.all([
+          fetch(`${API}/api/v1/servers/${id}/settings`, { credentials: "include" }),
+          fetch(`${API}/api/v1/user/me`, { credentials: "include" }),
+        ]);
+        if (sRes.ok) {
+          const data = await sRes.json();
+          setSettingDefs(data.defs ?? []);
+          setSettingValues(data.values ?? {});
+        }
+        if (meRes.ok) setUnlimited((await meRes.json()).unlimited_create === true);
+      } catch { /* best-effort : la carte reste masquée */ }
+    })();
+  }, [id]);
 
   // Charge la config billing + le SDK PayPal
   useEffect(() => {
@@ -574,6 +599,20 @@ export default function ServerPage() {
     setUpgrading(false);
   }
 
+  async function saveSettings() {
+    if (!confirm(t.srv.setConfirm)) return; // appliquer = recréation (monde conservé)
+    setSavingSettings(true);
+    const res = await fetch(`${API}/api/v1/servers/${id}/settings`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ values: settingValues }),
+    });
+    if (res.ok) fetchServer();
+    else alert(t.srv.errPrefix + (await res.text()));
+    setSavingSettings(false);
+  }
+
   async function changeVersion() {
     if (!selectedVersion) return;
     if (!confirm(t.srv.confirmVersion.replace("{v}", selectedVersion))) return;
@@ -851,14 +890,21 @@ export default function ServerPage() {
               );
             })}
           </div>
-          {selectedPlan && selectedPlan !== "free" && (
+          {selectedPlan && selectedPlan !== "free" && !unlimited && (
             <div className="mb-4 rounded-lg border border-indigo-900 bg-indigo-950/30 px-4 py-3 text-sm text-indigo-300">
               {t.srv.planPayHint
                 .replace("{plan}", t.planNames[selectedPlan] ?? selectedPlan)
                 .replace("{price}", plans.find((p) => p.id === selectedPlan)?.price ?? "")}
             </div>
           )}
-          {selectedPlan && selectedPlan !== "free" ? (
+          {selectedPlan && selectedPlan !== "free" && unlimited && (
+            <div className="mb-4 rounded-lg border border-amber-900 bg-amber-950/30 px-4 py-3 text-sm text-amber-300">
+              {t.srv.adminNoPay}
+            </div>
+          )}
+          {/* Compte unlimited_create (admin) : application directe, sans PayPal
+              (le backend vérifie le droit — paiement exigé pour les autres). */}
+          {selectedPlan && selectedPlan !== "free" && !unlimited ? (
             paypalEnabled ? (
               <div ref={paypalRef} className="max-w-xs" />
             ) : (
@@ -872,10 +918,54 @@ export default function ServerPage() {
               disabled={!selectedPlan || upgrading}
               className="bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-medium px-5 py-2 rounded-lg transition-colors"
             >
-              {upgrading ? t.srv.applying : selectedPlan ? t.srv.backToFree : t.srv.choosePlan}
+              {upgrading ? t.srv.applying : selectedPlan ? (selectedPlan === "free" ? t.srv.backToFree : t.srv.apply) : t.srv.choosePlan}
             </button>
           )}
         </div>
+
+        {/* Réglages de jeu (carte, nom, mots de passe…) — défs servies par l'API,
+            jeux sans réglages → carte masquée. Appliquer = recréation (monde conservé). */}
+        {settingDefs.length > 0 && (
+        <div className="border border-zinc-800 bg-zinc-900/70 rounded-2xl p-6">
+          <div className="flex items-center gap-2 font-semibold mb-1">
+            <SlidersHorizontal className="w-5 h-5 text-green-400" /> {t.srv.setTitle}
+          </div>
+          <p className="text-sm text-zinc-500 mb-4">{t.srv.setDesc}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            {settingDefs.map((d) => (
+              <label key={d.key} className="flex flex-col gap-1.5 text-sm">
+                <span className="text-zinc-400">{t.srv.setLabels[d.key] ?? d.key}</span>
+                {d.type === "select" ? (
+                  <select
+                    value={settingValues[d.key] ?? ""}
+                    onChange={(e) => setSettingValues((v) => ({ ...v, [d.key]: e.target.value }))}
+                    className="select-dark cursor-pointer bg-zinc-950 border border-zinc-700 rounded-lg pl-3 py-2 text-zinc-100 focus:outline-none focus:border-green-500"
+                  >
+                    <option value="">{t.srv.setDefault.replace("{v}", d.default)}</option>
+                    {(d.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type={d.type === "password" ? "password" : "text"}
+                    value={settingValues[d.key] ?? ""}
+                    maxLength={d.max_len || undefined}
+                    placeholder={d.default ? t.srv.setDefault.replace("{v}", d.default) : "—"}
+                    onChange={(e) => setSettingValues((v) => ({ ...v, [d.key]: e.target.value }))}
+                    className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-green-500"
+                  />
+                )}
+              </label>
+            ))}
+          </div>
+          <button
+            onClick={saveSettings}
+            disabled={savingSettings}
+            className="bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+          >
+            {savingSettings ? t.srv.applying : t.srv.apply}
+          </button>
+        </div>
+        )}
 
         {/* Version Minecraft (jeux MC uniquement) */}
         {server.game === "minecraft" && (

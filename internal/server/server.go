@@ -128,6 +128,8 @@ func (s *Server) mountRoutes() {
 				r.Post("/{id}/restart", s.handleRestartServer)
 				r.Post("/{id}/upgrade", s.handleUpgradeServer)
 				r.Post("/{id}/version", s.handleChangeVersion)
+				r.Get("/{id}/settings", s.handleGetSettings)    // réglages de jeu (défs + valeurs)
+				r.Post("/{id}/settings", s.handleUpdateSettings) // appliquer = recréation du container
 				r.Get("/{id}/players", s.handleServerPlayers)
 				r.Get("/{id}/playerlists", s.handlePlayerLists)
 				r.Post("/{id}/players/action", s.handlePlayerAction)
