@@ -525,6 +525,11 @@ func ecoEnv(_ Plan, _, _, _ string, _ int) []string {
 	return nil
 }
 
+// arkExtraSettingsBase : query-string de lancement ASA toujours présente.
+// ?listen : dans la commande officielle Wildcard et l'image mschnitzer, absent
+// de l'image sknnr — ajouté pour l'enregistrement de session EOS.
+const arkExtraSettingsBase = "?listen"
+
 // arkEnv : config pour l'image sknnr/ark-ascended-server (ASA sous GE Proton).
 // GAME_PORT aligne le port de jeu sur le bloc alloué (hôte == interne). Le cap
 // joueurs passe par le flag -WinLiveMaxPlayers (le MaxPlayers des .ini est
@@ -544,10 +549,9 @@ func arkEnv(plan Plan, _, _, _ string, base int) []string {
 		// le boot de validation a montré une troncature au premier espace.
 		"SESSION_NAME=Playrena-ARK",
 		"SERVER_ADMIN_PASSWORD=playrena-admin",
-		// ?listen : présent dans la commande officielle Wildcard et l'image
-		// mschnitzer, absent de l'image sknnr — ajouté via EXTRA_SETTINGS (collé à
-		// la query-string) pour l'enregistrement de session EOS (liste non-officielle).
-		"EXTRA_SETTINGS=?listen",
+		// Base de la query-string (cf. arkExtraSettingsBase) ; les réglages
+		// gameplay du propriétaire s'y composent (settings.go, SettingsEnv).
+		"EXTRA_SETTINGS=" + arkExtraSettingsBase,
 		fmt.Sprintf("EXTRA_FLAGS=-WinLiveMaxPlayers=%d -NoBattlEye -culture=en", players),
 	}
 }

@@ -88,7 +88,7 @@ export default function ServerPage() {
   const paypalRef = useRef<HTMLDivElement>(null);
   // Réglages de jeu (carte, nom, mots de passe… — défs servies par l'API) et
   // droit unlimited_create (admin) : change de plan payant sans passer par PayPal.
-  interface SettingDef { key: string; type: string; options?: string[]; default: string; max_len: number }
+  interface SettingDef { key: string; type: string; options?: string[]; default: string; max_len: number; min?: number; max?: number; step?: number }
   const [settingDefs, setSettingDefs] = useState<SettingDef[]>([]);
   const [settingValues, setSettingValues] = useState<Record<string, string>>({});
   const [savingSettings, setSavingSettings] = useState(false);
@@ -946,7 +946,10 @@ export default function ServerPage() {
                   </select>
                 ) : (
                   <input
-                    type={d.type === "password" ? "password" : "text"}
+                    type={d.type === "password" ? "password" : d.type === "number" ? "number" : "text"}
+                    min={d.type === "number" ? d.min : undefined}
+                    max={d.type === "number" ? d.max : undefined}
+                    step={d.type === "number" ? d.step : undefined}
                     value={settingValues[d.key] ?? ""}
                     maxLength={d.max_len || undefined}
                     placeholder={d.default ? t.srv.setDefault.replace("{v}", d.default) : "—"}

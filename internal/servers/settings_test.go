@@ -24,6 +24,36 @@ func TestSettingsEnvOverrides(t *testing.T) {
 	}
 }
 
+// Les réglages gameplay ARK sont des paramètres ?… composés dans UNE seule
+// variable EXTRA_SETTINGS, à partir de la base fixe (?listen), dans l'ordre
+// des défs ; la difficulté entraîne son suffixe DifficultyOffset.
+func TestSettingsEnvComposesQuery(t *testing.T) {
+	env := SettingsEnv("ark", map[string]string{
+		"difficulty": "5",
+		"taming":     "3",
+		"xp":         "2",
+		"pve":        "True",
+	})
+	want := "EXTRA_SETTINGS=?listen?OverrideOfficialDifficulty=5?DifficultyOffset=1?XPMultiplier=2?TamingSpeedMultiplier=3?ServerPVE=True"
+	found := false
+	for _, e := range env {
+		if e == want {
+			found = true
+		}
+		if strings.HasPrefix(e, "EXTRA_SETTINGS=") && e != want {
+			t.Fatalf("composition inattendue : %q", e)
+		}
+	}
+	if !found {
+		t.Fatalf("attendu %q dans %q", want, env)
+	}
+	// Sans réglage Query, EXTRA_SETTINGS n'est pas surchargé (la base de
+	// arkEnv reste).
+	if env := SettingsEnv("ark", map[string]string{"map": "TheCenter_WP"}); len(env) != 1 || env[0] != "SERVER_MAP=TheCenter_WP" {
+		t.Fatalf("surcharge inattendue : %q", env)
+	}
+}
+
 func TestValidateSettings(t *testing.T) {
 	cases := []struct {
 		game   string
@@ -41,6 +71,10 @@ func TestValidateSettings(t *testing.T) {
 		{"valheim", map[string]string{"server_name": "Les Vikings de Sherbrooke"}, true},
 		{"minecraft", map[string]string{"motd": "Bienvenue chez Simon !"}, true},
 		{"minecraft", map[string]string{"motd": "a\nb"}, false},                    // retour à la ligne
+		{"ark", map[string]string{"xp": "2.5"}, true},
+		{"ark", map[string]string{"xp": "0"}, false},                               // sous le min
+		{"ark", map[string]string{"xp": "1e3"}, false},                             // pas un décimal simple
+		{"ark", map[string]string{"difficulty": "12"}, false},                      // hors liste
 	}
 	for _, c := range cases {
 		err := ValidateSettings(c.game, c.values)
