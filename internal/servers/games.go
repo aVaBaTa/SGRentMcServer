@@ -538,7 +538,10 @@ const arkExtraSettingsBase = "?listen"
 // arkEnv : config pour l'image sknnr/ark-ascended-server (ASA sous GE Proton).
 // GAME_PORT aligne le port de jeu sur le bloc alloué (hôte == interne). Le cap
 // joueurs passe par le flag -WinLiveMaxPlayers (le MaxPlayers des .ini est
-// cassé en ASA) ; -NoBattlEye : BattlEye sous Proton est source de kicks/crashs.
+// cassé en ASA). BattlEye reste ACTIF : il démarre bien sous GE-Proton 10
+// (« BattlEye successfully started » vérifié), c'est préférable pour un serveur
+// loué, et -NoBattlEye était la dernière différence avec un serveur Windows
+// standard lors du diagnostic « invisible dans la liste » (2026-10-03).
 // -culture=en : sans culture définie, le serveur ne s'enregistre pas dans la
 // liste non-officielle EOS (cause n°1 des serveurs ASA « invisibles ») ; l'ini
 // généré par l'image ne la pose pas, le flag UE équivaut à [Internationalization].
@@ -557,7 +560,7 @@ func arkEnv(plan Plan, _, _, _ string, base int) []string {
 		// Base de la query-string (cf. arkExtraSettingsBase) ; les réglages
 		// gameplay du propriétaire s'y composent (settings.go, SettingsEnv).
 		"EXTRA_SETTINGS=" + arkExtraSettingsBase,
-		fmt.Sprintf("EXTRA_FLAGS=-WinLiveMaxPlayers=%d -NoBattlEye -culture=en", players),
+		fmt.Sprintf("EXTRA_FLAGS=-WinLiveMaxPlayers=%d -culture=en", players),
 	}
 }
 
